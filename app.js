@@ -11,10 +11,16 @@ const LEDGER_PATH = "data/ledger.json";
 
 function githubToken() {
   try {
-    return (localStorage.getItem("mom-ledger-github-token") || "").trim();
+    return cleanToken(localStorage.getItem("mom-ledger-github-token") || "");
   } catch {
     return "";
   }
+}
+
+function forgetStoredToken() {
+  try {
+    localStorage.removeItem("mom-ledger-github-token");
+  } catch { /* 저장된 키가 없어도 됩니다. */ }
 }
 
 function canWrite() {
@@ -309,7 +315,10 @@ async function fetchLedger() {
 async function commitLedger() {
   const headers = githubHeaders(false);
   const metaRes = await fetch(contentsUrl(), { headers, cache: "no-store" });
-  if (metaRes.status === 401) throw new Error("token");
+  if (metaRes.status === 401 || metaRes.status === 403) {
+    forgetStoredToken();
+    throw new Error(metaRes.status === 403 ? "forbidden" : "token");
+  }
   if (!metaRes.ok) throw new Error("save failed");
   const meta = await metaRes.json();
   const put = await fetch(contentsUrl(), {
@@ -322,7 +331,10 @@ async function commitLedger() {
       branch: "main"
     })
   });
-  if (put.status === 401) throw new Error("token");
+  if (put.status === 401 || put.status === 403) {
+    forgetStoredToken();
+    throw new Error(put.status === 403 ? "forbidden" : "token");
+  }
   if (put.status === 409) throw new Error("conflict");
   if (!put.ok) throw new Error("save failed");
 }
@@ -330,7 +342,8 @@ async function commitLedger() {
 function saveErrorMessage(error) {
   if (error && error.message === "password") return "가족 암호가 없어 저장하지 못했습니다.";
   if (error && error.message === "needkey") return "기록을 남기려면 가족 키가 필요합니다. 보기만 할 때는 가족 암호만 있으면 됩니다.";
-  if (error && error.message === "token") return "가족 키가 맞지 않습니다. github_pat_ 로 시작하는 키 전체를 다시 넣어 주세요.";
+  if (error && error.message === "token") return "저장된 가족 키가 거절되었습니다. 아래에 새로 만든 키를 넣어 주세요.";
+  if (error && error.message === "forbidden") return "가족 키에 저장 권한이 없습니다. Contents를 Read and write로 만든 새 키를 아래에 넣어 주세요.";
   if (error && error.message === "conflict") return "다른 사람이 방금 저장했습니다. 새로고침한 뒤 다시 남겨 주세요.";
   if (localMode) return "저장하지 못했습니다. 장부 창이 켜져 있는지 확인해 주세요.";
   return "GitHub 장부에 저장하지 못했습니다. 가족 키를 확인해 주세요.";
@@ -1609,7 +1622,8 @@ async function onSubmit(event) {
         return;
       }
       localStorage.setItem("mom-ledger-github-token", token);
-      toast("이 휴대폰에 가족 키를 저장했습니다. 이제 기록을 남길 수 있습니다.");
+      if (!gateMode && state && familyPassword) await persist();
+      else toast("이 휴대폰에 가족 키를 저장했습니다. 이제 기록을 남길 수 있습니다.");
       if (gateMode) renderGate();
       else render();
       return;
@@ -1673,6 +1687,10 @@ async function onSubmit(event) {
     render();
   } catch (error) {
     toast(saveErrorMessage(error));
+    if (error && (error.message === "token" || error.message === "forbidden")) {
+      if (gateMode) renderGate();
+      else render();
+    }
   }
 }
 
