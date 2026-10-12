@@ -522,10 +522,7 @@ function rememberAuthor(name) {
 }
 
 function authorOptions() {
-  const names = new Set([
-    ...state.events.map((event) => event.recordedBy),
-    ...state.glucose.map((item) => item.recordedBy)
-  ].filter(Boolean));
+  const names = new Set(state.events.map((event) => event.recordedBy).filter(Boolean));
   const saved = localStorage.getItem("mom-ledger-author");
   if (saved) names.add(saved);
   return [...names];
@@ -590,8 +587,8 @@ function render(options = {}) {
       ${renderBanners()}
       <nav class="tabs no-print" role="tablist" aria-label="장부 메뉴">
         ${tabButton("home", "오늘", "오늘")}
-        ${tabButton("events", "기록", "특이사항")}
         ${tabButton("glucose", "혈당", "혈당")}
+        ${tabButton("events", "기록", "특이사항")}
         ${tabButton("appointments", "병원", "병원 일정")}
         ${tabButton("profile", "정보", "기본 정보")}
         ${tabButton("summary", "요약", "진료 요약")}
@@ -795,8 +792,7 @@ function renderDayRow(row) {
       <p class="when">${time ? esc(time) + " · " : ""}혈당</p>
       <div class="badges"><span class="badge sugar">${esc(item.timing || "혈당")}</span></div>
       <h3 class="sugar-num">${esc(item.value)} <span>mg/dL</span></h3>
-      ${item.note ? `<p>${textOf(item.note)}</p>` : ""}
-      ${item.recordedBy ? `<p class="meta">기록 ${esc(item.recordedBy)}</p>` : ""}`;
+      ${item.note ? `<p>${textOf(item.note)}</p>` : ""}`;
   }
   if (row.kind === "appointment") {
     const item = row.item;
@@ -879,8 +875,7 @@ function renderGlucoseForm(item) {
     at: nowLocalValue(),
     value: "",
     timing: "공복",
-    note: "",
-    recordedBy: localStorage.getItem("mom-ledger-author") || ""
+    note: ""
   };
   return `
     <form class="card" id="glucose-form" data-form="glucose" autocomplete="off">
@@ -890,12 +885,10 @@ function renderGlucoseForm(item) {
         <label>언제 쟀나<input type="datetime-local" name="at" value="${esc(value.at)}" required></label>
         <label>수치 (mg/dL)<input name="value" inputmode="numeric" value="${esc(value.value)}" required placeholder="예: 128"></label>
         <label>어떤 때<select name="timing">${options(GLUCOSE_TIMINGS, value.timing)}</select></label>
-        <label>누가 적나<input name="recordedBy" list="authors" value="${esc(value.recordedBy)}" placeholder="예: 큰딸"></label>
       </div>
       <label style="margin-top:12px">메모
         <input name="note" value="${esc(value.note)}" placeholder="예: 아침을 조금 드신 뒤">
       </label>
-      <datalist id="authors">${authorOptions().map((name) => `<option value="${esc(name)}"></option>`).join("")}</datalist>
       ${formError ? `<p class="form-error">${esc(formError)}</p>` : ""}
       <div class="actions" style="margin-top:12px">
         <button class="btn" type="submit">${item ? "고친 내용 저장" : "혈당 저장"}</button>
@@ -1675,10 +1668,8 @@ function saveGlucose(form) {
     at: data.at,
     value: Math.round(value),
     timing: data.timing || "기타",
-    note: data.note.trim(),
-    recordedBy: data.recordedBy.trim()
+    note: data.note.trim()
   };
-  rememberAuthor(record.recordedBy);
   const index = state.glucose.findIndex((item) => item.id === record.id);
   if (index >= 0) state.glucose[index] = record;
   else state.glucose.push(record);
