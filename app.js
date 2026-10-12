@@ -41,7 +41,14 @@ function toBase64(text) {
   return btoa(binary);
 }
 
+const KDF_ITERATIONS = 120000;
+
 let state = null;
+let vault = null;
+let familyPassword = "";
+let familyKey = null;
+let pendingPlain = null;
+let gateMode = null;
 let serverReady = false;
 let newerBackup = null;
 let tab = "home";
@@ -78,7 +85,29 @@ async function boot() {
     }
   }
   try {
-    state = await fetchLedger();
+    const raw = await fetchRawLedger();
+    if (isLockedEnvelope(raw)) {
+      vault = raw;
+      const saved = rememberedPassword();
+      const opened = saved ? await decryptEnvelope(saved, vault) : null;
+      if (opened) {
+        state = opened.state;
+        familyKey = opened.key;
+        familyPassword = saved;
+        gateMode = null;
+        render();
+        return;
+      } else {
+        gateMode = "unlock";
+        renderGate();
+        return;
+      }
+    } else {
+      pendingPlain = normalize(raw);
+      gateMode = "setup";
+      renderGate();
+      return;
+    }
   } catch {
     document.getElementById("app").innerHTML = `
       <div class="wrap"><div class="card">
@@ -87,8 +116,6 @@ async function boot() {
       </div></div>`;
     return;
   }
-  if (localMode) readBackup();
-  render();
 }
 
 function blank() {
@@ -161,16 +188,110 @@ function toast(message) {
   toast._t = setTimeout(() => el.classList.remove("show"), 3400);
 }
 
-async function fetchLedger() {
+async function fetchRawLedger() {
   if (!localMode) {
     try {
       const res = await fetch(contentsUrl(), { headers: githubHeaders(true), cache: "no-store" });
-      if (res.ok) return normalize(await res.json());
+      if (res.ok) return await res.json();
     } catch { /* 페이지에 포함된 파일을 대신 읽습니다. */ }
   }
   const res = await fetch("data/ledger.json?t=" + Date.now(), { cache: "no-store" });
   if (!res.ok) throw new Error("missing");
-  return normalize(await res.json());
+  return await res.json();
+}
+
+function isLockedEnvelope(data) {
+  return Boolean(data && data.locked === true && data.format === 2 && data.salt && data.iv && data.data);
+}
+
+function rememberedPassword() {
+  try {
+    return localStorage.getItem("mom-ledger-pass") || "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberPassword(password, remember) {
+  try {
+    if (remember) localStorage.setItem("mom-ledger-pass", password);
+    else localStorage.removeItem("mom-ledger-pass");
+  } catch { /* 휴대폰에 암호를 기억하지 못해도 이번 화면에서는 열립니다. */ }
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+async function deriveKey(password, salt, iterations) {
+  const material = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations, hash: "SHA-256" },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function decryptEnvelope(password, envelope) {
+  try {
+    const salt = base64ToBytes(envelope.salt);
+    const iv = base64ToBytes(envelope.iv);
+    const key = await deriveKey(password, salt, envelope.iterations || KDF_ITERATIONS);
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      base64ToBytes(envelope.data)
+    );
+    return { state: normalize(JSON.parse(new TextDecoder().decode(plain))), key };
+  } catch {
+    return null;
+  }
+}
+
+async function sealState(freshSalt) {
+  if (!familyPassword) throw new Error("password");
+  const salt = !freshSalt && vault && vault.salt
+    ? base64ToBytes(vault.salt)
+    : crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  if (freshSalt) familyKey = null;
+  const key = familyKey || await deriveKey(familyPassword, salt, KDF_ITERATIONS);
+  familyKey = key;
+  const cipher = new Uint8Array(await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(JSON.stringify(state))
+  ));
+  vault = {
+    format: 2,
+    locked: true,
+    kdf: "PBKDF2",
+    iterations: KDF_ITERATIONS,
+    salt: bytesToBase64(salt),
+    iv: bytesToBase64(iv),
+    data: bytesToBase64(cipher)
+  };
+}
+
+async function fetchLedger() {
+  return fetchRawLedger();
 }
 
 async function commitLedger() {
@@ -184,7 +305,7 @@ async function commitLedger() {
     headers,
     body: JSON.stringify({
       message: state.updatedBy ? `기록 갱신 · ${state.updatedBy}` : "기록 갱신",
-      content: toBase64(JSON.stringify(state, null, 2) + "\n"),
+      content: toBase64(JSON.stringify(vault, null, 2) + "\n"),
       sha: meta.sha,
       branch: "main"
     })
@@ -195,6 +316,7 @@ async function commitLedger() {
 }
 
 function saveErrorMessage(error) {
+  if (error && error.message === "password") return "가족 암호가 없어 저장하지 못했습니다.";
   if (error && error.message === "token") return "가족 키가 맞지 않습니다. 키를 다시 넣어 주세요.";
   if (error && error.message === "conflict") return "다른 사람이 방금 저장했습니다. 새로고침한 뒤 다시 남겨 주세요.";
   if (localMode) return "저장하지 못했습니다. 장부 창이 켜져 있는지 확인해 주세요.";
@@ -204,15 +326,16 @@ function saveErrorMessage(error) {
 async function persist() {
   state.updatedAt = new Date().toISOString();
   state.updatedBy = localStorage.getItem("mom-ledger-author") || state.updatedBy || "";
+  await sealState(false);
   try {
-    localStorage.setItem("mom-ledger-backup", JSON.stringify(state));
-  } catch { /* 브라우저 저장이 막혀 있어도 파일 저장은 계속합니다. */ }
+    localStorage.removeItem("mom-ledger-backup");
+  } catch { /* 예전 기록이 없어도 됩니다. */ }
   newerBackup = null;
   if (serverReady) {
     const res = await fetch("/api/ledger", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(state)
+      body: JSON.stringify(vault)
     });
     if (!res.ok) throw new Error("save failed");
   }
@@ -234,7 +357,8 @@ async function persist() {
 }
 
 function downloadLedger() {
-  const blob = new Blob([JSON.stringify(state, null, 2) + "\n"], { type: "application/json" });
+  const payload = vault || state;
+  const blob = new Blob([JSON.stringify(payload, null, 2) + "\n"], { type: "application/json" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = "ledger.json";
@@ -397,6 +521,41 @@ function isBlank(book) {
     && book.appointments.length === 0 && profile.medications.length === 0;
 }
 
+function renderGate() {
+  document.title = "어머니 돌봄 장부";
+  const setup = gateMode === "setup";
+  document.getElementById("app").innerHTML = `
+    <div class="wrap">
+      <header class="mast">
+        <div class="seal" aria-hidden="true">돌봄</div>
+        <div>
+          <p class="eyebrow">가족 기록</p>
+          <h1>어머니 돌봄 장부</h1>
+          <p class="sub">가족 암호를 아는 사람만 내용을 볼 수 있습니다.</p>
+        </div>
+      </header>
+      <form class="card" data-form="${setup ? "create-pass" : "unlock"}" autocomplete="off">
+        <h2>${setup ? "가족 암호 만들기" : "가족 암호"}</h2>
+        <p class="hint">${setup
+          ? "암호를 정하면 장부 글이 잠깁니다. 암호를 잊으면 기록을 다시 열 수 없습니다."
+          : "형제끼리 정한 암호를 넣으면 장부가 열립니다."}</p>
+        <label style="margin-top:12px">가족 암호
+          <input name="password" type="password" autocomplete="${setup ? "new-password" : "current-password"}" required>
+        </label>
+        ${setup ? `<label>암호 다시 입력<input name="again" type="password" autocomplete="new-password" required></label>` : ""}
+        <label class="check">
+          <input type="checkbox" name="remember" checked>
+          이 휴대폰에 암호 기억하기
+        </label>
+        <div class="actions" style="margin-top:12px">
+          <button class="btn" type="submit">${setup ? "암호로 잠그기" : "장부 열기"}</button>
+        </div>
+        ${setup && !canWrite() ? `<p class="hint">암호로 잠그려면 먼저 아래 가족 키를 넣습니다.</p>` : ""}
+      </form>
+      ${!localMode ? renderFamilyKey() : ""}
+    </div>`;
+}
+
 function render() {
   const name = state.profile.name ? `${state.profile.name} 님` : "어머니";
   document.title = state.profile.name ? `${state.profile.name} 돌봄 장부` : "어머니 돌봄 장부";
@@ -421,7 +580,7 @@ function render() {
       </nav>
       ${renderPanel()}
       <footer class="footer no-print">
-        <p>링크를 아는 사람이 이 장부를 볼 수 있습니다. 주민등록번호와 계좌번호는 적지 않습니다.</p>
+        <p>가족 암호를 아는 사람만 장부 내용을 볼 수 있습니다. 주민등록번호와 계좌번호는 적지 않습니다.</p>
         ${localMode ? "<p>기록 파일은 이 폴더의 data/ledger.json 입니다. 형제 화면은 GitHub에 올린 뒤에 바뀝니다.</p>" : ""}
       </footer>
     </div>`;
@@ -471,6 +630,11 @@ function tabButton(id, short, long) {
 function renderBanners() {
   const blocks = [];
   if (!localMode) blocks.push(renderFamilyKey());
+  if (rememberedPassword()) {
+    blocks.push(`<div class="banner no-print"><p>이 휴대폰에 가족 암호가 기억되어 있습니다.</p>
+      <div class="row"><button type="button" class="btn-ghost" data-action="forget-pass">이 휴대폰의 암호 지우기</button></div>
+    </div>`);
+  }
   if (localMode && !serverReady) {
     blocks.push(`<div class="banner warn no-print"><p>저장 창이 꺼져 있습니다. start-ledger.bat 으로 열면 기록이 파일에 바로 저장됩니다.</p></div>`);
   }
@@ -1033,6 +1197,16 @@ function onClick(event) {
     render();
     return;
   }
+  if (action === "forget-pass") {
+    try { localStorage.removeItem("mom-ledger-pass"); } catch { /* 없어도 됩니다. */ }
+    familyPassword = "";
+    familyKey = null;
+    state = null;
+    gateMode = vault ? "unlock" : "setup";
+    toast("이 휴대폰에서 가족 암호를 지웠습니다.");
+    renderGate();
+    return;
+  }
   if (action === "download") {
     downloadLedger();
     return;
@@ -1083,6 +1257,51 @@ async function onSubmit(event) {
       }
       localStorage.setItem("mom-ledger-github-token", token);
       toast("이 휴대폰에 가족 키를 저장했습니다. 이제 기록을 남길 수 있습니다.");
+      if (gateMode) renderGate();
+      else render();
+      return;
+    }
+    if (form.dataset.form === "create-pass") {
+      const data = new FormData(form);
+      const password = data.get("password").toString();
+      const again = data.get("again").toString();
+      if (password.length < 4) {
+        toast("암호는 네 글자 이상으로 정해 주세요.");
+        return;
+      }
+      if (password !== again) {
+        toast("암호가 서로 다릅니다.");
+        return;
+      }
+      if (!canWrite()) {
+        toast("먼저 가족 키를 넣어 주세요.");
+        return;
+      }
+      state = pendingPlain;
+      familyPassword = password;
+      familyKey = null;
+      vault = null;
+      rememberPassword(password, form.elements.remember.checked);
+      await persist();
+      pendingPlain = null;
+      gateMode = null;
+      toast("가족 암호로 장부를 잠갔습니다.");
+      render();
+      return;
+    }
+    if (form.dataset.form === "unlock") {
+      const data = new FormData(form);
+      const password = data.get("password").toString();
+      const opened = await decryptEnvelope(password, vault);
+      if (!opened) {
+        toast("암호가 맞지 않습니다.");
+        return;
+      }
+      state = opened.state;
+      familyKey = opened.key;
+      familyPassword = password;
+      rememberPassword(password, form.elements.remember.checked);
+      gateMode = null;
       render();
       return;
     }
