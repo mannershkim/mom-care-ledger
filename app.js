@@ -205,6 +205,15 @@ function textOf(value) {
     .replace(/(^|<br>)\s*[-–—]\s*/g, '$1<span class="dot-mark"></span>');
 }
 
+function purposeList(value) {
+  const lines = String(value || "")
+    .split(/\n/)
+    .map((line) => line.replace(/^\s*[-–—•]\s*/, "").trim())
+    .filter(Boolean);
+  if (!lines.length) return "";
+  return `<ul class="reason-list">${lines.map((line) => `<li>${esc(line)}</li>`).join("")}</ul>`;
+}
+
 function toast(message) {
   const el = document.getElementById("toast");
   el.textContent = message;
@@ -866,7 +875,7 @@ function renderDayRow(row) {
       <p class="when">${time ? esc(time) + " · " : ""}병원</p>
       ${item.status && item.status !== "예정" ? `<div class="badges"><span class="badge ${statusClass(item.status)}">${esc(item.status)}</span></div>` : ""}
       <h3>${esc(appointmentTitle(item))}</h3>
-      ${item.purpose ? `<p>${textOf(item.purpose)}</p>` : ""}
+      ${item.purpose ? purposeList(item.purpose) : ""}
       ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
       ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
       ${item.visitNote ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}`;
@@ -1253,7 +1262,7 @@ function renderAppointmentBody(item, withActions = false) {
       ${late ? `<span class="badge late">예정일이 지났습니다</span>` : ""}
     </div>` : ""}
     <h3>${esc(appointmentTitle(item))}</h3>
-    ${item.purpose ? `<p>${textOf(item.purpose)}</p>` : ""}
+    ${item.purpose ? purposeList(item.purpose) : ""}
     ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
     ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
     ${item.visitNote ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}

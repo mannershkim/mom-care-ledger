@@ -536,6 +536,29 @@ code {
   vertical-align: middle;
 }
 
+.reason-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reason-list li {
+  position: relative;
+  margin: 4px 0;
+  padding-left: 16px;
+}
+
+.reason-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue-deep);
+}
+
 .sugar-table-wrap { overflow-x: auto; }
 
 .sugar-table {
