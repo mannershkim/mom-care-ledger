@@ -794,8 +794,9 @@ function renderDayRow(row) {
 }
 
 function renderUpcomingHospitals() {
-  const items = upcomingAppointments();
-  if (!items.length) return `<p class="empty">예정된 병원이 없습니다.</p>`;
+  ensureCalendar();
+  const items = upcomingAppointments().filter((item) => String(item.at || "").slice(0, 10) !== selectedDate);
+  if (!items.length) return "";
   const groups = [];
   for (const item of items) {
     const key = String(item.at || "").slice(0, 10);
@@ -814,6 +815,8 @@ function renderUpcomingHospitals() {
 function renderHome() {
   const notable = state.events.filter((event) => event.showDoctor).slice().sort(byNewest).slice(0, 3);
   const meds = state.profile.medications.filter((item) => item.name);
+  const upcoming = renderUpcomingHospitals();
+  const showNext = Boolean(upcoming) || upcomingAppointments().length === 0;
   return `
     <div class="home-grid">
       <div class="stack">
@@ -821,11 +824,11 @@ function renderHome() {
           ${renderCalendar()}
           ${renderDaySchedule()}
         </article>
-        <article class="card">
+        ${showNext ? `<article class="card">
           <p class="kicker">다음 병원</p>
-          ${renderUpcomingHospitals()}
+          ${upcoming || `<p class="empty">예정된 병원이 없습니다.</p>`}
           ${canWrite() ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-appointment">병원 일정 남기기</button></div>` : ""}
-        </article>
+        </article>` : ""}
         <article class="card">
           <p class="kicker">진료 때 말할 최근 일</p>
           ${notable.length ? `<ul class="list">${notable.map((event) => `<li class="item">${renderEventItem(event)}</li>`).join("")}</ul>` : `<p class="empty">보여 주기로 한 특이사항이 없습니다.</p>`}
