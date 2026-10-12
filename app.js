@@ -78,6 +78,10 @@ document.addEventListener("input", onInput);
 
 boot();
 
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
+
 async function boot() {
   if (localMode) {
     try {
