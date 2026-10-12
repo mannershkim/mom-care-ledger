@@ -883,7 +883,7 @@ function renderDayRow(row) {
 
 function renderUpcomingHospitals() {
   ensureCalendar();
-  const items = upcomingAppointments().filter((item) => String(item.at || "").slice(0, 10) !== selectedDate);
+  const items = upcomingAppointments().filter((item) => String(item.at || "").slice(0, 10) > selectedDate);
   if (!items.length) return "";
   const groups = [];
   for (const item of items) {
