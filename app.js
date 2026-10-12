@@ -851,21 +851,66 @@ function renderGlucose() {
   for (const group of groups) group.items.sort(bySoonest);
   return `
     <div class="stack">
-      <div class="card no-print">
-        <h2>혈당</h2>
-        <p class="hint">하루에도 여러 번 잴 수 있습니다. 단위는 mg/dL입니다.</p>
-        ${canWrite() && !showForm ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-glucose">혈당 남기기</button></div>` : ""}
-      </div>
+      ${canWrite() && !showForm ? `<div class="actions no-print"><button type="button" class="btn" data-action="compose-glucose">혈당 남기기</button></div>` : ""}
       ${showForm ? renderGlucoseForm(editing) : ""}
-      ${groups.length ? groups.map((group) => `
-        <article class="card">
-          <p class="big-date">${esc(formatWhen(group.key))}</p>
-          <p class="meta">${esc(relativeDay(group.key))}</p>
-          <ul class="list">${group.items.map((item) => `<li class="item">${renderDayRow({ at: item.at, kind: "glucose", item })}${canWrite() ? `<div class="actions no-print">
-            <button type="button" class="btn-ghost" data-action="edit-glucose" data-id="${esc(item.id)}">고치기</button>
-            <button type="button" class="btn-ghost" data-action="delete-glucose" data-id="${esc(item.id)}">지우기</button>
-          </div>` : ""}</li>`).join("")}</ul>
-        </article>`).join("") : `<article class="card"><p class="empty">아직 적힌 혈당이 없습니다.</p></article>`}
+      <article class="card">
+        ${groups.length ? renderGlucoseTable(groups) : `<p class="empty">아직 적힌 혈당이 없습니다.</p>`}
+      </article>
+    </div>`;
+}
+
+function glucoseStats(items) {
+  const values = items.map((item) => Number(item.value)).filter((value) => Number.isFinite(value));
+  const sum = values.reduce((total, value) => total + value, 0);
+  return {
+    avg: Math.round(sum / values.length),
+    min: Math.min(...values),
+    max: Math.max(...values)
+  };
+}
+
+function shortDate(key) {
+  const [year, month, day] = String(key).split("-").map(Number);
+  if (!year || !month || !day) return key;
+  const prefix = year === new Date().getFullYear() ? "" : `${year}년 `;
+  return `${prefix}${month}월 ${day}일`;
+}
+
+function weekdayName(key) {
+  const [year, month, day] = String(key).split("-").map(Number);
+  if (!year || !month || !day) return "";
+  return "일월화수목금토"[new Date(year, month - 1, day).getDay()];
+}
+
+function renderGlucoseTable(groups) {
+  return `
+    <div class="sugar-table-wrap">
+      <table class="sugar-table">
+        <thead>
+          <tr>
+            <th>날짜</th>
+            <th>요일</th>
+            <th>평균</th>
+            <th>최저</th>
+            <th>최고</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${groups.map((group) => {
+            const stats = glucoseStats(group.items);
+            return `<tr>
+              <td>${esc(shortDate(group.key))}</td>
+              <td>${esc(weekdayName(group.key))}</td>
+              <td class="num">${stats.avg}</td>
+              <td class="num">${stats.min}</td>
+              <td class="num">${stats.max}</td>
+            </tr>
+            <tr class="sugar-detail">
+              <td colspan="5">${group.items.map((item) => `<span class="sugar-chip">${esc(clockOf(item.at))} ${esc(item.timing || "")} <strong>${esc(item.value)}</strong>${item.note ? " " + esc(item.note) : ""}</span>${canWrite() ? `<span class="no-print"><button type="button" class="btn-ghost" data-action="edit-glucose" data-id="${esc(item.id)}">고치기</button><button type="button" class="btn-ghost" data-action="delete-glucose" data-id="${esc(item.id)}">지우기</button></span>` : ""}`).join("")}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
     </div>`;
 }
 

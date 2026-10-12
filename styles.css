@@ -523,6 +523,55 @@ code {
 
 .empty { margin: 8px 0 0; color: var(--muted); }
 
+.sugar-table-wrap { overflow-x: auto; }
+
+.sugar-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sugar-table th,
+.sugar-table td {
+  padding: 10px 6px;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.sugar-table th {
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sugar-table td:first-child,
+.sugar-table th:first-child { text-align: left; }
+
+.sugar-table .num {
+  font-weight: 800;
+  color: var(--blue-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.sugar-table .sugar-detail td {
+  white-space: normal;
+  text-align: left;
+  font-weight: 500;
+  padding-top: 4px;
+}
+
+.sugar-chip {
+  display: inline-block;
+  margin: 0 12px 8px 0;
+  font-weight: 700;
+}
+
+.sugar-detail .btn-ghost {
+  min-height: 36px;
+  padding: 4px 10px;
+  margin: 0 6px 8px 0;
+}
+
 @media (min-width: 760px) {
   body { font-size: 16px; background: #f5f9fd; }
 
