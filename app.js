@@ -200,7 +200,9 @@ function esc(value) {
 }
 
 function textOf(value) {
-  return esc(value).replace(/\n/g, "<br>");
+  return esc(value)
+    .replace(/\n/g, "<br>")
+    .replace(/(^|<br>)\s*[-–—]\s*/g, '$1<span class="dot-mark"></span>');
 }
 
 function toast(message) {
@@ -826,7 +828,7 @@ function renderDaySchedule() {
     ...found.family.map((item) => ({ at: `${selectedDate}${String(item.at).includes("T") ? "T" + String(item.at).split("T")[1] : ""}`, kind: "family", item }))
   ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const heading = relativeDay(selectedDate) === "오늘" ? "오늘 일정" : "이 날의 일정";
-  const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow(row)}</li>`).join("")}</ul>` : `<p class="empty">이 날의 일정이 없습니다.</p>`;
+  const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow(row)}</li>`).join("")}</ul>` : `<p class="empty">일정이 없습니다.</p>`;
   return `
     <div id="day-detail" class="day-detail">
       <p class="kicker">${heading}</p>
