@@ -793,6 +793,11 @@ function renderDaySchedule() {
     </div>`;
 }
 
+function appointmentTitle(item) {
+  const place = [item.hospital || "병원", item.department].filter(Boolean).join(" · ");
+  return [place, item.doctor].filter(Boolean).join(" ");
+}
+
 function renderDayRow(row) {
   const time = clockOf(row.at);
   if (row.kind === "glucose") {
@@ -808,8 +813,7 @@ function renderDayRow(row) {
     return `
       <p class="when">${time ? esc(time) + " · " : ""}병원</p>
       <div class="badges"><span class="badge ${statusClass(item.status)}">${esc(item.status || "일정")}</span></div>
-      <h3>${esc(item.hospital || "병원")}${item.department ? " · " + esc(item.department) : ""}</h3>
-      ${item.doctor ? `<p>선생님 ${esc(item.doctor)}</p>` : ""}
+      <h3>${esc(appointmentTitle(item))}</h3>
       ${item.purpose ? `<p>${textOf(item.purpose)}</p>` : ""}
       ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
       ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
@@ -841,7 +845,6 @@ function renderUpcomingHospitals() {
   return groups.map((group) => `
     <section class="upcoming-day">
       <p class="big-date">${esc(formatWhen(group.key))}</p>
-      <p class="meta">${esc(relativeDay(group.key))}</p>
       <ul class="list">${group.items.map((item) => `<li class="item">${renderDayRow({ at: item.at, kind: "appointment", item })}</li>`).join("")}</ul>
     </section>`).join("");
 }
@@ -1192,11 +1195,9 @@ function renderAppointmentBody(item, withActions = false) {
     <p class="big-date">${esc(formatWhen(item.at))}</p>
     <div class="badges">
       <span class="badge ${statusClass(item.status)}">${esc(item.status)}</span>
-      <span class="badge">${esc(relativeDay(item.at))}</span>
       ${late ? `<span class="badge late">예정일이 지났습니다</span>` : ""}
     </div>
-    <h3>${esc(item.hospital || "병원")}${item.department ? " · " + esc(item.department) : ""}</h3>
-    ${item.doctor ? `<p>선생님 ${esc(item.doctor)}</p>` : ""}
+    <h3>${esc(appointmentTitle(item))}</h3>
     ${item.purpose ? `<p>${textOf(item.purpose)}</p>` : ""}
     ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
     ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
