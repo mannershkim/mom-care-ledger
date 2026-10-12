@@ -5,6 +5,41 @@ const BLOOD_TYPES = ["", "A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-", "모�
 const GENDERS = ["", "여", "남"];
 
 const localMode = ["127.0.0.1", "localhost"].includes(location.hostname);
+const REPO = "mannershkim/mom-care-ledger";
+const LEDGER_PATH = "data/ledger.json";
+
+function githubToken() {
+  try {
+    return (localStorage.getItem("mom-ledger-github-token") || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function canWrite() {
+  return localMode || Boolean(githubToken());
+}
+
+function contentsUrl() {
+  return `https://api.github.com/repos/${REPO}/contents/${LEDGER_PATH}`;
+}
+
+function githubHeaders(raw) {
+  const headers = {
+    Accept: raw ? "application/vnd.github.raw" : "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28"
+  };
+  const token = githubToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+function toBase64(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
 
 let state = null;
 let serverReady = false;
@@ -43,9 +78,7 @@ async function boot() {
     }
   }
   try {
-    const res = await fetch("data/ledger.json?t=" + Date.now(), { cache: "no-store" });
-    if (!res.ok) throw new Error("missing");
-    state = normalize(await res.json());
+    state = await fetchLedger();
   } catch {
     document.getElementById("app").innerHTML = `
       <div class="wrap"><div class="card">
@@ -128,6 +161,46 @@ function toast(message) {
   toast._t = setTimeout(() => el.classList.remove("show"), 3400);
 }
 
+async function fetchLedger() {
+  if (!localMode) {
+    try {
+      const res = await fetch(contentsUrl(), { headers: githubHeaders(true), cache: "no-store" });
+      if (res.ok) return normalize(await res.json());
+    } catch { /* 페이지에 포함된 파일을 대신 읽습니다. */ }
+  }
+  const res = await fetch("data/ledger.json?t=" + Date.now(), { cache: "no-store" });
+  if (!res.ok) throw new Error("missing");
+  return normalize(await res.json());
+}
+
+async function commitLedger() {
+  const headers = githubHeaders(false);
+  const metaRes = await fetch(contentsUrl(), { headers, cache: "no-store" });
+  if (metaRes.status === 401) throw new Error("token");
+  if (!metaRes.ok) throw new Error("save failed");
+  const meta = await metaRes.json();
+  const put = await fetch(contentsUrl(), {
+    method: "PUT",
+    headers,
+    body: JSON.stringify({
+      message: state.updatedBy ? `기록 갱신 · ${state.updatedBy}` : "기록 갱신",
+      content: toBase64(JSON.stringify(state, null, 2) + "\n"),
+      sha: meta.sha,
+      branch: "main"
+    })
+  });
+  if (put.status === 401) throw new Error("token");
+  if (put.status === 409) throw new Error("conflict");
+  if (!put.ok) throw new Error("save failed");
+}
+
+function saveErrorMessage(error) {
+  if (error && error.message === "token") return "가족 키가 맞지 않습니다. 키를 다시 넣어 주세요.";
+  if (error && error.message === "conflict") return "다른 사람이 방금 저장했습니다. 새로고침한 뒤 다시 남겨 주세요.";
+  if (localMode) return "저장하지 못했습니다. 장부 창이 켜져 있는지 확인해 주세요.";
+  return "GitHub 장부에 저장하지 못했습니다. 가족 키를 확인해 주세요.";
+}
+
 async function persist() {
   state.updatedAt = new Date().toISOString();
   state.updatedBy = localStorage.getItem("mom-ledger-author") || state.updatedBy || "";
@@ -142,11 +215,22 @@ async function persist() {
       body: JSON.stringify(state)
     });
     if (!res.ok) throw new Error("save failed");
+  }
+  if (githubToken()) {
+    await commitLedger();
+    toast(serverReady ? "이 컴퓨터와 GitHub 장부에 저장했습니다." : "GitHub 장부에 저장했습니다. 형제 화면은 새로고침하면 보입니다.");
+    return;
+  }
+  if (serverReady) {
     toast("이 컴퓨터 장부 파일에 저장했습니다.");
     return;
   }
-  downloadLedger();
-  toast("장부 파일을 내려받았습니다. data 폴더의 ledger.json 과 바꾸면 됩니다.");
+  if (localMode) {
+    downloadLedger();
+    toast("장부 파일을 내려받았습니다. data 폴더의 ledger.json 과 바꾸면 됩니다.");
+    return;
+  }
+  throw new Error("token");
 }
 
 function downloadLedger() {
@@ -355,23 +439,47 @@ function restoreSearchFocus() {
   searchCaret = null;
 }
 
+function renderFamilyKey() {
+  if (githubToken()) {
+    return `<div class="banner no-print"><p>이 휴대폰에서 남긴 기록은 GitHub 장부에 저장됩니다. 다른 형제 화면은 새로고침하면 보입니다.</p>
+      <div class="row"><button type="button" class="btn-ghost" data-action="forget-key">이 휴대폰의 가족 키 지우기</button></div>
+    </div>`;
+  }
+  return `<form class="banner no-print" data-form="token" autocomplete="off">
+    <p>형제들도 여기서 기록을 남기려면 가족 키를 한 번 넣습니다. 키는 이 휴대폰에만 저장되고, 장부에는 적히지 않습니다.</p>
+    <label style="margin-top:10px">가족 키
+      <input name="token" type="password" placeholder="github_pat_..." autocomplete="off">
+    </label>
+    <div class="row"><button class="btn" type="submit">키 저장</button></div>
+    <details style="margin-top:10px">
+      <summary>가족 키 만드는 방법</summary>
+      <ol class="steps">
+        <li>GitHub 오른쪽 위 프로필 사진 → Settings</li>
+        <li>맨 아래 Developer settings → Fine-grained tokens → Generate new token</li>
+        <li>Repository access에서 mom-care-ledger 만 고릅니다.</li>
+        <li>Permissions의 Contents를 Read and write로 고릅니다.</li>
+        <li>만들어진 키를 형제 카카오톡으로 보내고, 각자 이 칸에 한 번 넣습니다.</li>
+      </ol>
+    </details>
+  </form>`;
+}
+
 function tabButton(id, short, long) {
   return `<button type="button" role="tab" data-action="tab" data-tab="${id}" aria-selected="${tab === id}" aria-label="${long}"><span class="tab-short">${short}</span><span class="tab-long">${long}</span></button>`;
 }
 
 function renderBanners() {
   const blocks = [];
-  if (!localMode) {
-    blocks.push(`<div class="banner no-print"><p>이 주소는 보기 전용입니다. 새 기록은 장부를 관리하는 사람의 컴퓨터에서 남깁니다. 진료 요약은 인쇄하거나 복사할 수 있습니다.</p></div>`);
-  } else if (!serverReady) {
+  if (!localMode) blocks.push(renderFamilyKey());
+  if (localMode && !serverReady) {
     blocks.push(`<div class="banner warn no-print"><p>저장 창이 꺼져 있습니다. start-ledger.bat 으로 열면 기록이 파일에 바로 저장됩니다.</p></div>`);
   }
   if (state.demo) {
     blocks.push(`<div class="banner no-print"><p>지금 보이는 ${esc(state.profile.name || "홍길순")} 님 기록은 사용법을 보여 주는 예시입니다.</p>
-      ${localMode ? `<div class="row"><button type="button" class="btn" data-action="clear-demo">예시 지우기</button></div>` : ""}
+      ${canWrite() ? `<div class="row"><button type="button" class="btn" data-action="clear-demo">예시 지우기</button></div>` : ""}
     </div>`);
   }
-  if (localMode && isBlank(state)) {
+  if (canWrite() && isBlank(state)) {
     blocks.push(`<div class="banner no-print"><p>빈 장부입니다. 사용법이 보고 싶으면 예시를 다시 불러올 수 있습니다.</p>
       <div class="row"><button type="button" class="btn-ghost" data-action="restore-sample">예시 다시 불러오기</button></div>
     </div>`);
@@ -405,12 +513,12 @@ function renderHome() {
         <article class="card">
           <p class="kicker">다음 병원</p>
           ${next ? renderAppointmentBody(next) : `<p class="empty">예정된 병원이 없습니다.</p>`}
-          ${localMode ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-appointment">병원 일정 남기기</button></div>` : ""}
+          ${canWrite() ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-appointment">병원 일정 남기기</button></div>` : ""}
         </article>
         <article class="card">
           <p class="kicker">진료 때 말할 최근 일</p>
           ${notable.length ? `<ul class="list">${notable.map((event) => `<li class="item">${renderEventItem(event)}</li>`).join("")}</ul>` : `<p class="empty">보여 주기로 한 특이사항이 없습니다.</p>`}
-          ${localMode ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn pine" data-action="compose-event">특이사항 남기기</button></div>` : ""}
+          ${canWrite() ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn pine" data-action="compose-event">특이사항 남기기</button></div>` : ""}
         </article>
       </div>
       <div class="stack">
@@ -434,7 +542,7 @@ function renderShareCard() {
       <ol class="steps">
         <li>이 컴퓨터에서 기록을 남기면 data/ledger.json 에 저장됩니다.</li>
         <li>개인 GitHub에 올리면 형제용 주소가 생깁니다.</li>
-        <li>그 주소에서는 보기와 인쇄만 됩니다.</li>
+        <li>형제 휴대폰에서는 가족 키를 한 번 넣은 뒤 기록을 남깁니다.</li>
       </ol>
       <form data-form="share" style="margin-top:12px">
         <label>형제에게 보낼 주소
@@ -451,7 +559,7 @@ function renderShareCard() {
 
 function renderEvents() {
   const editing = state.events.find((event) => event.id === editingEventId) || null;
-  const showForm = localMode && (composingEvent || editing);
+  const showForm = canWrite() && (composingEvent || editing);
   const events = filteredEvents();
   return `
     <div class="stack">
@@ -469,7 +577,7 @@ function renderEvents() {
             <input id="event-search" data-filter="query" value="${esc(eventQuery)}" placeholder="증상, 이름, 내용">
           </label>
         </div>
-        ${localMode && !showForm ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-event">새 특이사항</button></div>` : ""}
+        ${canWrite() && !showForm ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-event">새 특이사항</button></div>` : ""}
       </div>
       ${showForm ? renderEventForm(editing) : ""}
       <div class="card">
@@ -544,7 +652,7 @@ function renderEventItem(event, withActions = false) {
     <p>${textOf(event.whatHappened)}</p>
     ${event.actionTaken ? `<p><strong>어떻게 했나</strong> ${textOf(event.actionTaken)}</p>` : ""}
     ${event.recordedBy ? `<p class="meta">기록 ${esc(event.recordedBy)}</p>` : ""}
-    ${withActions && localMode ? `<div class="actions no-print">
+    ${withActions && canWrite() ? `<div class="actions no-print">
       <button type="button" class="btn-ghost" data-action="edit-event" data-id="${esc(event.id)}">고치기</button>
       <button type="button" class="btn-ghost" data-action="delete-event" data-id="${esc(event.id)}">지우기</button>
     </div>` : ""}`;
@@ -552,7 +660,7 @@ function renderEventItem(event, withActions = false) {
 
 function renderAppointments() {
   const editing = state.appointments.find((item) => item.id === editingAppointmentId) || null;
-  const showForm = localMode && (composingAppointment || editing);
+  const showForm = canWrite() && (composingAppointment || editing);
   const upcoming = upcomingAppointments();
   const past = state.appointments.filter((item) => item.status !== "예정" && item.status !== "변경").slice().sort(byNewest);
   return `
@@ -560,7 +668,7 @@ function renderAppointments() {
       <div class="card no-print">
         <h2>병원 일정</h2>
         <p class="hint">예약과, 다녀온 뒤의 이야기를 같이 적습니다.</p>
-        ${localMode && !showForm ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-appointment">새 병원 일정</button></div>` : ""}
+        ${canWrite() && !showForm ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-appointment">새 병원 일정</button></div>` : ""}
       </div>
       ${showForm ? renderAppointmentForm(editing) : ""}
       <article class="card">
@@ -629,14 +737,14 @@ function renderAppointmentBody(item, withActions = false) {
     ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
     ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
     ${item.visitNote ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}
-    ${withActions && localMode ? `<div class="actions no-print">
+    ${withActions && canWrite() ? `<div class="actions no-print">
       <button type="button" class="btn-ghost" data-action="edit-appointment" data-id="${esc(item.id)}">고치기</button>
       <button type="button" class="btn-ghost" data-action="delete-appointment" data-id="${esc(item.id)}">지우기</button>
     </div>` : ""}`;
 }
 
 function renderProfile() {
-  if (!localMode) return `<article class="card">${renderProfileRead()}</article>`;
+  if (!canWrite()) return `<article class="card">${renderProfileRead()}</article>`;
   const profile = state.profile;
   return `
     <form class="card" id="profile-form" data-form="profile" autocomplete="off">
@@ -919,6 +1027,12 @@ function onClick(event) {
     render();
     return;
   }
+  if (action === "forget-key") {
+    try { localStorage.removeItem("mom-ledger-github-token"); } catch { /* 없어도 됩니다. */ }
+    toast("이 휴대폰에서 가족 키를 지웠습니다.");
+    render();
+    return;
+  }
   if (action === "download") {
     downloadLedger();
     return;
@@ -960,6 +1074,18 @@ async function onSubmit(event) {
   event.preventDefault();
   formError = "";
   try {
+    if (form.dataset.form === "token") {
+      const token = new FormData(form).get("token").toString().trim();
+      const ok = await checkToken(token);
+      if (!ok) {
+        toast("가족 키가 맞지 않습니다.");
+        return;
+      }
+      localStorage.setItem("mom-ledger-github-token", token);
+      toast("이 휴대폰에 가족 키를 저장했습니다. 이제 기록을 남길 수 있습니다.");
+      render();
+      return;
+    }
     if (form.dataset.form === "event") saveEvent(form);
     else if (form.dataset.form === "appointment") saveAppointment(form);
     else if (form.dataset.form === "profile") saveProfile();
@@ -972,8 +1098,8 @@ async function onSubmit(event) {
     }
     await persist();
     render();
-  } catch {
-    toast("저장하지 못했습니다. 장부 창이 켜져 있는지 확인해 주세요.");
+  } catch (error) {
+    toast(saveErrorMessage(error));
   }
 }
 
@@ -1059,10 +1185,23 @@ function readRows(selector, fields, attr) {
 async function saveAndRender() {
   try {
     await persist();
-  } catch {
-    toast("저장하지 못했습니다. 장부 창이 켜져 있는지 확인해 주세요.");
+  } catch (error) {
+    toast(saveErrorMessage(error));
   }
   render();
+}
+
+async function checkToken(token) {
+  if (!token) return false;
+  const res = await fetch(contentsUrl(), {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28"
+    },
+    cache: "no-store"
+  });
+  return res.ok;
 }
 
 async function restoreSample() {
