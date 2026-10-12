@@ -749,13 +749,11 @@ function renderCalendar() {
     const marks = [];
     if (found.events.length) marks.push(`<span class="cal-mark event"></span>`);
     if (found.appointments.length) marks.push(`<span class="cal-mark hospital"></span>`);
-    if (found.glucose.length) marks.push(`<span class="cal-mark sugar"></span>`);
     const label = [
       `${month + 1}월 ${day}일`,
       key === today ? "오늘" : "",
       found.events.length ? `특이사항 ${found.events.length}건` : "",
-      found.appointments.length ? `병원 ${found.appointments.length}건` : "",
-      found.glucose.length ? `혈당 ${found.glucose.length}건` : ""
+      found.appointments.length ? `병원 ${found.appointments.length}건` : ""
     ].filter(Boolean).join(", ");
     const sunday = new Date(year, month, day).getDay() === 0;
     cells.push(`<button type="button" class="cal-day${key === today ? " today" : ""}${sunday ? " sun" : ""}" data-action="cal-day" data-date="${key}" aria-pressed="${key === selectedDate}" aria-label="${esc(label)}"><span class="cal-num">${day}</span><span class="cal-marks">${marks.join("")}</span></button>`);
@@ -775,7 +773,6 @@ function renderCalendar() {
     <div class="cal-legend">
       <span><i class="cal-mark event"></i> 특이사항</span>
       <span><i class="cal-mark hospital"></i> 병원</span>
-      <span><i class="cal-mark sugar"></i> 혈당</span>
     </div>`;
 }
 
