@@ -91,7 +91,7 @@ h3 { margin: 0 0 6px; font-size: 18px; }
   transform: translateX(-50%);
   width: min(480px, 100%);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 4px;
   margin: 0;
   padding: 6px 8px calc(8px + env(safe-area-inset-bottom));
@@ -112,7 +112,7 @@ h3 { margin: 0 0 6px; font-size: 18px; }
   background: transparent;
   color: var(--muted);
   font-weight: 800;
-  font-size: 14px;
+  font-size: 13px;
   padding: 6px 2px;
   min-height: 46px;
 }
@@ -330,9 +330,14 @@ textarea { min-height: 120px; resize: vertical; }
 
 .cal-mark.event { background: #7eb6e6; }
 .cal-mark.hospital { background: var(--blue-deep); }
+.cal-mark.sugar { background: #1d6b45; }
 
 .cal-day[aria-pressed="true"] .cal-mark.event { background: #d7ebfa; }
 .cal-day[aria-pressed="true"] .cal-mark.hospital { background: #fff; }
+.cal-day[aria-pressed="true"] .cal-mark.sugar { background: #d7f3e4; }
+
+.sugar-num { margin: 0; font-size: 28px; color: var(--blue-deep); }
+.sugar-num span { font-size: 15px; font-weight: 800; color: var(--muted); }
 
 .cal-legend {
   display: flex;
@@ -400,6 +405,7 @@ textarea { min-height: 120px; resize: vertical; }
 .badge.watch { background: var(--soft); color: var(--blue-deep); border-color: transparent; }
 .badge.doctor { background: var(--blue); color: white; border-color: transparent; }
 .badge.done { background: #e5f4ea; color: #1d6b45; border-color: transparent; }
+.badge.sugar { background: #e5f4ea; color: #1d6b45; border-color: transparent; }
 .badge.late { background: #fdecea; color: var(--danger); border-color: transparent; }
 
 .timeline { display: grid; gap: 0; }
@@ -480,7 +486,7 @@ code {
 
 .form-error { color: var(--danger); font-weight: 800; margin: 0; }
 
-#event-form, #appointment-form, #profile-form {
+#event-form, #appointment-form, #profile-form, #glucose-form {
   scroll-margin-top: 12px;
   scroll-margin-bottom: 110px;
 }
@@ -595,7 +601,7 @@ code {
 
   .toast { bottom: 24px; }
 
-  #event-form, #appointment-form, #profile-form {
+  #event-form, #appointment-form, #profile-form, #glucose-form {
     scroll-margin-top: 72px;
     scroll-margin-bottom: 0;
   }

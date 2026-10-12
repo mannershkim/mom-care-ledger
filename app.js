@@ -3,6 +3,7 @@ const SEVERITIES = ["기록", "살펴보기", "병원 상담"];
 const STATUSES = ["예정", "다녀옴", "변경", "취소"];
 const BLOOD_TYPES = ["", "A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-", "모름"];
 const GENDERS = ["", "여", "남"];
+const GLUCOSE_TIMINGS = ["공복", "아침 식전", "아침 식후", "점심 식전", "점심 식후", "저녁 식전", "저녁 식후", "취침", "기타"];
 
 const localMode = ["127.0.0.1", "localhost"].includes(location.hostname);
 const REPO = "mannershkim/mom-care-ledger";
@@ -59,6 +60,8 @@ let editingEventId = null;
 let editingAppointmentId = null;
 let composingEvent = false;
 let composingAppointment = false;
+let composingGlucose = false;
+let editingGlucoseId = null;
 let eventCategory = "전체";
 let eventSeverity = "전체";
 let eventQuery = "";
@@ -134,7 +137,8 @@ function blank() {
     shareUrl: "",
     profile: { medications: [], contacts: [] },
     events: [],
-    appointments: []
+    appointments: [],
+    glucose: []
   });
 }
 
@@ -153,7 +157,8 @@ function normalize(data) {
     shareUrl: data.shareUrl || "",
     profile,
     events: Array.isArray(data.events) ? data.events : [],
-    appointments: Array.isArray(data.appointments) ? data.appointments : []
+    appointments: Array.isArray(data.appointments) ? data.appointments : [],
+    glucose: Array.isArray(data.glucose) ? data.glucose : []
   };
 }
 
@@ -517,7 +522,10 @@ function rememberAuthor(name) {
 }
 
 function authorOptions() {
-  const names = new Set(state.events.map((event) => event.recordedBy).filter(Boolean));
+  const names = new Set([
+    ...state.events.map((event) => event.recordedBy),
+    ...state.glucose.map((item) => item.recordedBy)
+  ].filter(Boolean));
   const saved = localStorage.getItem("mom-ledger-author");
   if (saved) names.add(saved);
   return [...names];
@@ -526,7 +534,7 @@ function authorOptions() {
 function isBlank(book) {
   const profile = book.profile;
   return !profile.name && !profile.birthDate && book.events.length === 0
-    && book.appointments.length === 0 && profile.medications.length === 0;
+    && book.appointments.length === 0 && book.glucose.length === 0 && profile.medications.length === 0;
 }
 
 function renderGate() {
@@ -575,7 +583,7 @@ function render(options = {}) {
         <div>
           <p class="eyebrow">가족 기록</p>
           <h1>${esc(name)}의 돌봄 장부</h1>
-          <p class="sub">평소와 다른 일, 병원 약속, 진료 때 전할 말을 한곳에 둡니다.</p>
+          <p class="sub">평소와 다른 일, 혈당, 병원 약속, 진료 때 전할 말을 한곳에 둡니다.</p>
           <p class="meta">마지막 기록 ${esc(formatStamp(state.updatedAt))}${state.updatedBy ? " · " + esc(state.updatedBy) : ""}</p>
         </div>
       </header>
@@ -583,6 +591,7 @@ function render(options = {}) {
       <nav class="tabs no-print" role="tablist" aria-label="장부 메뉴">
         ${tabButton("home", "오늘", "오늘")}
         ${tabButton("events", "기록", "특이사항")}
+        ${tabButton("glucose", "혈당", "혈당")}
         ${tabButton("appointments", "병원", "병원 일정")}
         ${tabButton("profile", "정보", "기본 정보")}
         ${tabButton("summary", "요약", "진료 요약")}
@@ -663,6 +672,7 @@ function renderBanners() {
 function renderPanel() {
   if (tab === "home") return `<section class="panel">${renderHome()}</section>`;
   if (tab === "events") return `<section class="panel">${renderEvents()}</section>`;
+  if (tab === "glucose") return `<section class="panel">${renderGlucose()}</section>`;
   if (tab === "appointments") return `<section class="panel">${renderAppointments()}</section>`;
   if (tab === "profile") return `<section class="panel">${renderProfile()}</section>`;
   return `<section class="panel summary">${renderSummary()}</section>`;
@@ -697,7 +707,8 @@ function itemsOnDate(key) {
   const match = (item) => String(item.at || "").slice(0, 10) === key;
   return {
     events: state.events.filter(match).slice().sort(bySoonest),
-    appointments: state.appointments.filter(match).slice().sort(bySoonest)
+    appointments: state.appointments.filter(match).slice().sort(bySoonest),
+    glucose: state.glucose.filter(match).slice().sort(bySoonest)
   };
 }
 
@@ -728,11 +739,13 @@ function renderCalendar() {
     const marks = [];
     if (found.events.length) marks.push(`<span class="cal-mark event"></span>`);
     if (found.appointments.length) marks.push(`<span class="cal-mark hospital"></span>`);
+    if (found.glucose.length) marks.push(`<span class="cal-mark sugar"></span>`);
     const label = [
       `${month + 1}월 ${day}일`,
       key === today ? "오늘" : "",
       found.events.length ? `특이사항 ${found.events.length}건` : "",
-      found.appointments.length ? `병원 ${found.appointments.length}건` : ""
+      found.appointments.length ? `병원 ${found.appointments.length}건` : "",
+      found.glucose.length ? `혈당 ${found.glucose.length}건` : ""
     ].filter(Boolean).join(", ");
     const sunday = new Date(year, month, day).getDay() === 0;
     cells.push(`<button type="button" class="cal-day${key === today ? " today" : ""}${sunday ? " sun" : ""}" data-action="cal-day" data-date="${key}" aria-pressed="${key === selectedDate}" aria-label="${esc(label)}"><span class="cal-num">${day}</span><span class="cal-marks">${marks.join("")}</span></button>`);
@@ -752,6 +765,7 @@ function renderCalendar() {
     <div class="cal-legend">
       <span><i class="cal-mark event"></i> 특이사항</span>
       <span><i class="cal-mark hospital"></i> 병원</span>
+      <span><i class="cal-mark sugar"></i> 혈당</span>
     </div>`;
 }
 
@@ -760,7 +774,8 @@ function renderDaySchedule() {
   const found = itemsOnDate(selectedDate);
   const rows = [
     ...found.appointments.map((item) => ({ at: item.at, kind: "appointment", item })),
-    ...found.events.map((item) => ({ at: item.at, kind: "event", item }))
+    ...found.events.map((item) => ({ at: item.at, kind: "event", item })),
+    ...found.glucose.map((item) => ({ at: item.at, kind: "glucose", item }))
   ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const heading = relativeDay(selectedDate) === "오늘" ? "오늘 일정" : "이 날의 일정";
   const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow(row)}</li>`).join("")}</ul>` : `<p class="empty">이 날에는 적힌 일정과 기록이 없습니다.</p>`;
@@ -774,6 +789,15 @@ function renderDaySchedule() {
 
 function renderDayRow(row) {
   const time = clockOf(row.at);
+  if (row.kind === "glucose") {
+    const item = row.item;
+    return `
+      <p class="when">${time ? esc(time) + " · " : ""}혈당</p>
+      <div class="badges"><span class="badge sugar">${esc(item.timing || "혈당")}</span></div>
+      <h3 class="sugar-num">${esc(item.value)} <span>mg/dL</span></h3>
+      ${item.note ? `<p>${textOf(item.note)}</p>` : ""}
+      ${item.recordedBy ? `<p class="meta">기록 ${esc(item.recordedBy)}</p>` : ""}`;
+  }
   if (row.kind === "appointment") {
     const item = row.item;
     return `
@@ -815,6 +839,80 @@ function renderUpcomingHospitals() {
       <p class="meta">${esc(relativeDay(group.key))}</p>
       <ul class="list">${group.items.map((item) => `<li class="item">${renderDayRow({ at: item.at, kind: "appointment", item })}</li>`).join("")}</ul>
     </section>`).join("");
+}
+
+function renderGlucose() {
+  const editing = state.glucose.find((item) => item.id === editingGlucoseId) || null;
+  const showForm = canWrite() && (composingGlucose || editing);
+  const readings = state.glucose.slice().sort(byNewest);
+  const groups = [];
+  for (const item of readings) {
+    const key = String(item.at || "").slice(0, 10);
+    const last = groups[groups.length - 1];
+    if (!last || last.key !== key) groups.push({ key, items: [item] });
+    else last.items.push(item);
+  }
+  for (const group of groups) group.items.sort(bySoonest);
+  return `
+    <div class="stack">
+      <div class="card no-print">
+        <h2>혈당</h2>
+        <p class="hint">하루에도 여러 번 잴 수 있습니다. 단위는 mg/dL입니다.</p>
+        ${canWrite() && !showForm ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-glucose">혈당 남기기</button></div>` : ""}
+      </div>
+      ${showForm ? renderGlucoseForm(editing) : ""}
+      ${groups.length ? groups.map((group) => `
+        <article class="card">
+          <p class="big-date">${esc(formatWhen(group.key))}</p>
+          <p class="meta">${esc(relativeDay(group.key))}</p>
+          <ul class="list">${group.items.map((item) => `<li class="item">${renderDayRow({ at: item.at, kind: "glucose", item })}${canWrite() ? `<div class="actions no-print">
+            <button type="button" class="btn-ghost" data-action="edit-glucose" data-id="${esc(item.id)}">고치기</button>
+            <button type="button" class="btn-ghost" data-action="delete-glucose" data-id="${esc(item.id)}">지우기</button>
+          </div>` : ""}</li>`).join("")}</ul>
+        </article>`).join("") : `<article class="card"><p class="empty">아직 적힌 혈당이 없습니다.</p></article>`}
+    </div>`;
+}
+
+function renderGlucoseForm(item) {
+  const value = item || {
+    id: "",
+    at: nowLocalValue(),
+    value: "",
+    timing: "공복",
+    note: "",
+    recordedBy: localStorage.getItem("mom-ledger-author") || ""
+  };
+  return `
+    <form class="card" id="glucose-form" data-form="glucose" autocomplete="off">
+      <h2>${item ? "혈당 고치기" : "혈당 남기기"}</h2>
+      <input type="hidden" name="id" value="${esc(value.id)}">
+      <div class="grid-2">
+        <label>언제 쟀나<input type="datetime-local" name="at" value="${esc(value.at)}" required></label>
+        <label>수치 (mg/dL)<input name="value" inputmode="numeric" value="${esc(value.value)}" required placeholder="예: 128"></label>
+        <label>어떤 때<select name="timing">${options(GLUCOSE_TIMINGS, value.timing)}</select></label>
+        <label>누가 적나<input name="recordedBy" list="authors" value="${esc(value.recordedBy)}" placeholder="예: 큰딸"></label>
+      </div>
+      <label style="margin-top:12px">메모
+        <input name="note" value="${esc(value.note)}" placeholder="예: 아침을 조금 드신 뒤">
+      </label>
+      <datalist id="authors">${authorOptions().map((name) => `<option value="${esc(name)}"></option>`).join("")}</datalist>
+      ${formError ? `<p class="form-error">${esc(formError)}</p>` : ""}
+      <div class="actions" style="margin-top:12px">
+        <button class="btn" type="submit">${item ? "고친 내용 저장" : "혈당 저장"}</button>
+        <button class="btn-ghost" type="button" data-action="cancel-form">취소</button>
+      </div>
+    </form>`;
+}
+
+function recentGlucose() {
+  return state.glucose
+    .filter((item) => {
+      if (!summaryDays) return true;
+      const diff = dayDiff(item.at);
+      return diff != null && diff <= 0 && diff >= -summaryDays;
+    })
+    .slice()
+    .sort(byNewest);
 }
 
 function renderHome() {
@@ -1192,6 +1290,8 @@ function renderSummary() {
         ${event.actionTaken ? `<p>조치: ${textOf(event.actionTaken)}</p>` : ""}
         ${event.recordedBy ? `<p class="meta">기록 ${esc(event.recordedBy)}</p>` : ""}
       `).join("") : `<p>이 기간에 진료 때 보여 줄 특이사항이 없습니다.</p>`}
+      <h3>혈당</h3>
+      ${recentGlucose().length ? recentGlucose().map((item) => `<p>${esc(formatWhen(item.at))} ${esc(item.timing)} ${esc(item.value)} mg/dL${item.note ? " · " + esc(item.note) : ""}</p>`).join("") : `<p>이 기간에 적힌 혈당이 없습니다.</p>`}
       <h3>병원 일정</h3>
       ${upcoming.length ? upcoming.map((item) => `<p>${esc(formatWhen(item.at))} ${esc(item.hospital)} ${esc(item.department)} ${esc(item.purpose)}</p>`).join("") : `<p>예정된 병원이 없습니다.</p>`}
       <h3>가족 연락처</h3>
@@ -1239,6 +1339,10 @@ function summaryPlain() {
     if (event.actionTaken) lines.push(`  어떻게 함: ${event.actionTaken}`);
     if (event.recordedBy) lines.push(`  기록: ${event.recordedBy}`);
   }
+  lines.push("", "혈당:");
+  const sugars = recentGlucose();
+  if (!sugars.length) lines.push("- 이 기간에 적힌 혈당이 없습니다.");
+  for (const item of sugars) lines.push(`- ${formatWhen(item.at)} ${item.timing} ${item.value} mg/dL${item.note ? " " + item.note : ""}`);
   lines.push("", "다음 병원:");
   if (!upcoming.length) lines.push("- 예정된 병원이 없습니다.");
   for (const item of upcoming) lines.push(`- ${formatWhen(item.at)} ${item.hospital} ${item.department} ${item.purpose}`.trim());
@@ -1285,6 +1389,24 @@ function onClick(event) {
     document.getElementById("event-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
+  if (action === "compose-glucose") {
+    tab = "glucose";
+    composingGlucose = true;
+    editingGlucoseId = null;
+    formError = "";
+    render();
+    document.getElementById("glucose-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (action === "edit-glucose") {
+    tab = "glucose";
+    editingGlucoseId = id;
+    composingGlucose = false;
+    formError = "";
+    render();
+    document.getElementById("glucose-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
   if (action === "compose-appointment") {
     tab = "appointments";
     composingAppointment = true;
@@ -1313,8 +1435,10 @@ function onClick(event) {
   if (action === "cancel-form") {
     composingEvent = false;
     composingAppointment = false;
+    composingGlucose = false;
     editingEventId = null;
     editingAppointmentId = null;
+    editingGlucoseId = null;
     formError = "";
     render();
     return;
@@ -1323,6 +1447,13 @@ function onClick(event) {
     const found = state.events.find((item) => item.id === id);
     if (!found || !confirm(`이 기록을 지울까요?\n${titleOf(found)}`)) return;
     state.events = state.events.filter((item) => item.id !== id);
+    saveAndRender();
+    return;
+  }
+  if (action === "delete-glucose") {
+    const found = state.glucose.find((item) => item.id === id);
+    if (!found || !confirm(`이 혈당 기록을 지울까요?\n${found.value} mg/dL`)) return;
+    state.glucose = state.glucose.filter((item) => item.id !== id);
     saveAndRender();
     return;
   }
@@ -1490,6 +1621,7 @@ async function onSubmit(event) {
       return;
     }
     if (form.dataset.form === "event") saveEvent(form);
+    else if (form.dataset.form === "glucose") saveGlucose(form);
     else if (form.dataset.form === "appointment") saveAppointment(form);
     else if (form.dataset.form === "profile") saveProfile();
     else if (form.dataset.form === "share") {
@@ -1529,6 +1661,29 @@ function saveEvent(form) {
   else state.events.push(record);
   composingEvent = false;
   editingEventId = null;
+}
+
+function saveGlucose(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  const value = Number(String(data.value || "").replace(/,/g, "").trim());
+  if (!data.at || !Number.isFinite(value) || value < 20 || value > 600) {
+    formError = "혈당은 20에서 600 사이 숫자로 적어 주세요. 단위는 mg/dL입니다.";
+    return;
+  }
+  const record = {
+    id: data.id || uid(),
+    at: data.at,
+    value: Math.round(value),
+    timing: data.timing || "기타",
+    note: data.note.trim(),
+    recordedBy: data.recordedBy.trim()
+  };
+  rememberAuthor(record.recordedBy);
+  const index = state.glucose.findIndex((item) => item.id === record.id);
+  if (index >= 0) state.glucose[index] = record;
+  else state.glucose.push(record);
+  composingGlucose = false;
+  editingGlucoseId = null;
 }
 
 function saveAppointment(form) {
