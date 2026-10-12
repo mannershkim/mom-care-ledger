@@ -604,11 +604,7 @@ function restoreSearchFocus() {
 }
 
 function renderFamilyKey() {
-  if (githubToken()) {
-    return `<div class="banner no-print"><p>이 휴대폰에서 남긴 기록은 GitHub 장부에 저장됩니다. 다른 형제 화면은 새로고침하면 보입니다.</p>
-      <div class="row"><button type="button" class="btn-ghost" data-action="forget-key">이 휴대폰의 가족 키 지우기</button></div>
-    </div>`;
-  }
+  if (githubToken()) return "";
   return `<form class="banner no-print" data-form="token" autocomplete="off">
     <p>형제들도 여기서 기록을 남기려면 가족 키를 한 번 넣습니다. 키는 이 휴대폰에만 저장되고, 장부에는 적히지 않습니다.</p>
     <label style="margin-top:10px">가족 키
@@ -635,11 +631,6 @@ function tabButton(id, short, long) {
 function renderBanners() {
   const blocks = [];
   if (!localMode) blocks.push(renderFamilyKey());
-  if (rememberedPassword()) {
-    blocks.push(`<div class="banner no-print"><p>이 휴대폰에 가족 암호가 기억되어 있습니다.</p>
-      <div class="row"><button type="button" class="btn-ghost" data-action="forget-pass">이 휴대폰의 암호 지우기</button></div>
-    </div>`);
-  }
   if (localMode && !serverReady) {
     blocks.push(`<div class="banner warn no-print"><p>저장 창이 꺼져 있습니다. start-ledger.bat 으로 열면 기록이 파일에 바로 저장됩니다.</p></div>`);
   }
