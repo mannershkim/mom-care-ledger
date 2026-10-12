@@ -250,6 +250,108 @@ textarea { min-height: 120px; resize: vertical; }
   line-height: 1.35;
 }
 
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cal-head h2 { margin: 0; font-size: 22px; }
+
+.cal-nav { display: flex; gap: 6px; flex: none; }
+
+.cal-nav .btn-ghost {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  flex: none;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 12px;
+}
+
+.cal-dow {
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+  padding: 2px 0 6px;
+}
+
+.cal-dow.sun, .cal-day.sun { color: #9d4036; }
+
+.cal-day {
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 42px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #fff;
+  padding: 2px 0 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.cal-day.blank { background: transparent; }
+
+.cal-day.today { border-color: var(--blue); }
+
+.cal-day[aria-pressed="true"],
+.cal-day[aria-pressed="true"].sun {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+
+.cal-marks {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.cal-mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.cal-mark.event { background: #7eb6e6; }
+.cal-mark.hospital { background: var(--blue-deep); }
+
+.cal-day[aria-pressed="true"] .cal-mark.event { background: #d7ebfa; }
+.cal-day[aria-pressed="true"] .cal-mark.hospital { background: #fff; }
+
+.cal-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cal-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+.day-detail {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
 .allergy {
   background: #fdecea;
   border-radius: 14px;
@@ -447,6 +549,14 @@ code {
   }
 
   .card, .paper { background: #fff; padding: 20px; }
+
+  .cal-day { background: var(--sheet); }
+
+  .cal-day[aria-pressed="true"],
+  .cal-day[aria-pressed="true"].sun {
+    background: var(--blue);
+    color: #fff;
+  }
 
   .home-grid { grid-template-columns: 1.3fr 0.9fr; gap: 16px; }
 

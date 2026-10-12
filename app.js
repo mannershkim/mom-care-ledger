@@ -52,6 +52,9 @@ let gateMode = null;
 let serverReady = false;
 let newerBackup = null;
 let tab = "home";
+let selectedDate = "";
+let calendarYear = null;
+let calendarMonth = null;
 let editingEventId = null;
 let editingAppointmentId = null;
 let composingEvent = false;
@@ -556,7 +559,8 @@ function renderGate() {
     </div>`;
 }
 
-function render() {
+function render(options = {}) {
+  const keepScroll = options.keepScroll ? window.scrollY : 0;
   const name = state.profile.name ? `${state.profile.name} 님` : "어머니";
   document.title = state.profile.name ? `${state.profile.name} 돌봄 장부` : "어머니 돌봄 장부";
   document.getElementById("app").innerHTML = `
@@ -584,6 +588,7 @@ function render() {
         ${localMode ? "<p>기록 파일은 이 폴더의 data/ledger.json 입니다. 형제 화면은 GitHub에 올린 뒤에 바뀝니다.</p>" : ""}
       </footer>
     </div>`;
+  if (options.keepScroll) window.scrollTo(0, keepScroll);
   restoreSearchFocus();
 }
 
@@ -667,6 +672,135 @@ function renderPanel() {
   return `<section class="panel summary">${renderSummary()}</section>`;
 }
 
+function pad2(number) {
+  return String(number).padStart(2, "0");
+}
+
+function todayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+
+function ensureCalendar() {
+  if (!selectedDate) selectedDate = todayKey();
+  if (calendarYear == null || calendarMonth == null) {
+    const [year, month] = selectedDate.split("-").map(Number);
+    calendarYear = year;
+    calendarMonth = month - 1;
+  }
+}
+
+function shiftCalendar(delta) {
+  ensureCalendar();
+  const date = new Date(calendarYear, calendarMonth + delta, 1);
+  calendarYear = date.getFullYear();
+  calendarMonth = date.getMonth();
+}
+
+function itemsOnDate(key) {
+  const match = (item) => String(item.at || "").slice(0, 10) === key;
+  return {
+    events: state.events.filter(match).slice().sort(bySoonest),
+    appointments: state.appointments.filter(match).slice().sort(bySoonest)
+  };
+}
+
+function clockOf(value) {
+  const timePart = String(value || "").split("T")[1];
+  if (!timePart) return "";
+  const [hh, mm] = timePart.split(":");
+  const hour = Number(hh);
+  if (Number.isNaN(hour) || !mm) return "";
+  const ap = hour < 12 ? "오전" : "오후";
+  return `${ap}\u00A0${hour % 12 || 12}:${mm}`;
+}
+
+function renderCalendar() {
+  ensureCalendar();
+  const year = calendarYear;
+  const month = calendarMonth;
+  const startPad = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = todayKey();
+  const week = ["일", "월", "화", "수", "목", "금", "토"];
+  const heads = week.map((name, index) => `<div class="cal-dow${index === 0 ? " sun" : ""}">${name}</div>`).join("");
+  const cells = [];
+  for (let index = 0; index < startPad; index += 1) cells.push(`<span class="cal-day blank"></span>`);
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const key = `${year}-${pad2(month + 1)}-${pad2(day)}`;
+    const found = itemsOnDate(key);
+    const marks = [];
+    if (found.events.length) marks.push(`<span class="cal-mark event"></span>`);
+    if (found.appointments.length) marks.push(`<span class="cal-mark hospital"></span>`);
+    const label = [
+      `${month + 1}월 ${day}일`,
+      key === today ? "오늘" : "",
+      found.events.length ? `특이사항 ${found.events.length}건` : "",
+      found.appointments.length ? `병원 ${found.appointments.length}건` : ""
+    ].filter(Boolean).join(", ");
+    const sunday = new Date(year, month, day).getDay() === 0;
+    cells.push(`<button type="button" class="cal-day${key === today ? " today" : ""}${sunday ? " sun" : ""}" data-action="cal-day" data-date="${key}" aria-pressed="${key === selectedDate}" aria-label="${esc(label)}"><span class="cal-num">${day}</span><span class="cal-marks">${marks.join("")}</span></button>`);
+  }
+  return `
+    <div class="cal-head">
+      <h2>${year}년 ${month + 1}월</h2>
+      <div class="cal-nav">
+        <button type="button" class="btn-ghost" data-action="cal-prev" aria-label="이전 달">‹</button>
+        <button type="button" class="btn-ghost" data-action="cal-today">오늘</button>
+        <button type="button" class="btn-ghost" data-action="cal-next" aria-label="다음 달">›</button>
+      </div>
+    </div>
+    <div class="cal-grid" role="grid" aria-label="${year}년 ${month + 1}월 달력">
+      ${heads}${cells.join("")}
+    </div>
+    <div class="cal-legend">
+      <span><i class="cal-mark event"></i> 특이사항</span>
+      <span><i class="cal-mark hospital"></i> 병원</span>
+    </div>`;
+}
+
+function renderDaySchedule() {
+  ensureCalendar();
+  const found = itemsOnDate(selectedDate);
+  const rows = [
+    ...found.appointments.map((item) => ({ at: item.at, kind: "appointment", item })),
+    ...found.events.map((item) => ({ at: item.at, kind: "event", item }))
+  ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  const heading = relativeDay(selectedDate) === "오늘" ? "오늘 일정" : "이 날의 일정";
+  const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow(row)}</li>`).join("")}</ul>` : `<p class="empty">이 날에는 적힌 일정과 기록이 없습니다.</p>`;
+  return `
+    <div id="day-detail" class="day-detail">
+      <p class="kicker">${heading}</p>
+      <p class="big-date">${esc(formatWhen(selectedDate))}</p>
+      ${body}
+    </div>`;
+}
+
+function renderDayRow(row) {
+  const time = clockOf(row.at);
+  if (row.kind === "appointment") {
+    const item = row.item;
+    return `
+      <p class="when">${time ? esc(time) + " · " : ""}병원</p>
+      <div class="badges"><span class="badge ${statusClass(item.status)}">${esc(item.status || "일정")}</span></div>
+      <h3>${esc(item.hospital || "병원")}${item.department ? " · " + esc(item.department) : ""}</h3>
+      ${item.purpose ? `<p>${textOf(item.purpose)}</p>` : ""}
+      ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
+      ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
+      ${item.visitNote ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}`;
+  }
+  const event = row.item;
+  return `
+    <p class="when">${time ? esc(time) + " · " : ""}특이사항</p>
+    <div class="badges">
+      <span class="badge">${esc(event.category)}</span>
+      <span class="badge ${badgeClass(event.severity)}">${esc(event.severity)}</span>
+    </div>
+    <h3>${esc(titleOf(event))}</h3>
+    <p>${textOf(event.whatHappened)}</p>
+    ${event.actionTaken ? `<p><strong>어떻게 했나</strong> ${textOf(event.actionTaken)}</p>` : ""}`;
+}
+
 function renderHome() {
   const next = upcomingAppointments()[0];
   const notable = state.events.filter((event) => event.showDoctor).slice().sort(byNewest).slice(0, 3);
@@ -674,6 +808,10 @@ function renderHome() {
   return `
     <div class="home-grid">
       <div class="stack">
+        <article class="card calendar-card">
+          ${renderCalendar()}
+          ${renderDaySchedule()}
+        </article>
         <article class="card">
           <p class="kicker">다음 병원</p>
           ${next ? renderAppointmentBody(next) : `<p class="empty">예정된 병원이 없습니다.</p>`}
@@ -1098,6 +1236,26 @@ function onClick(event) {
     tab = button.dataset.tab;
     formError = "";
     render();
+    return;
+  }
+  if (action === "cal-prev" || action === "cal-next") {
+    shiftCalendar(action === "cal-prev" ? -1 : 1);
+    render({ keepScroll: true });
+    return;
+  }
+  if (action === "cal-today") {
+    selectedDate = todayKey();
+    const [year, month] = selectedDate.split("-").map(Number);
+    calendarYear = year;
+    calendarMonth = month - 1;
+    render({ keepScroll: true });
+    document.getElementById("day-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
+  if (action === "cal-day") {
+    selectedDate = button.dataset.date || selectedDate;
+    render({ keepScroll: true });
+    document.getElementById("day-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     return;
   }
   if (action === "compose-event") {
