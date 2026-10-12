@@ -329,11 +329,11 @@ function render() {
       </header>
       ${renderBanners()}
       <nav class="tabs no-print" role="tablist" aria-label="장부 메뉴">
-        ${tabButton("home", "오늘")}
-        ${tabButton("events", "특이사항")}
-        ${tabButton("appointments", "병원 일정")}
-        ${tabButton("profile", "기본 정보")}
-        ${tabButton("summary", "진료 요약")}
+        ${tabButton("home", "오늘", "오늘")}
+        ${tabButton("events", "기록", "특이사항")}
+        ${tabButton("appointments", "병원", "병원 일정")}
+        ${tabButton("profile", "정보", "기본 정보")}
+        ${tabButton("summary", "요약", "진료 요약")}
       </nav>
       ${renderPanel()}
       <footer class="footer no-print">
@@ -355,8 +355,8 @@ function restoreSearchFocus() {
   searchCaret = null;
 }
 
-function tabButton(id, label) {
-  return `<button type="button" role="tab" data-action="tab" data-tab="${id}" aria-selected="${tab === id}">${label}</button>`;
+function tabButton(id, short, long) {
+  return `<button type="button" role="tab" data-action="tab" data-tab="${id}" aria-selected="${tab === id}" aria-label="${long}"><span class="tab-short">${short}</span><span class="tab-long">${long}</span></button>`;
 }
 
 function renderBanners() {
