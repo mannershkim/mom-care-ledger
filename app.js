@@ -850,6 +850,79 @@ function appointmentTitle(item) {
   return [item.hospital || "병원", item.department, item.doctor].filter(Boolean).join(" · ");
 }
 
+function reminderAt(item) {
+  const [year, month, day] = String(item.at || "").slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day - 2, 12, 0, 0, 0);
+}
+
+function reminderNote(item) {
+  if (item.status && item.status !== "예정" && item.status !== "변경") return "";
+  const when = reminderAt(item);
+  if (!when) return "";
+  const label = `${when.getMonth() + 1}월 ${when.getDate()}일 정오`;
+  if (when.getTime() <= Date.now()) return `<p class="meta">이틀 전 정오 알림 시각은 지났습니다.</p>`;
+  return `<p class="meta">${label}에 알려 드립니다.</p>
+    <div class="actions no-print"><button type="button" class="btn-ghost" data-action="remind-appointment" data-id="${esc(item.id)}">휴대폰 알림에 넣기</button></div>`;
+}
+
+function icsEscape(value) {
+  return String(value || "").replace(/\\/g, "\\\\").replace(/\r?\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+}
+
+function icsUtc(date) {
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}00Z`;
+}
+
+function buildReminderIcs(item, when) {
+  const end = new Date(when.getTime() + 30 * 60 * 1000);
+  const visit = formatWhen(item.at);
+  const place = appointmentTitle(item);
+  const summary = `병원 이틀 전 · ${place}`;
+  const description = [`병원은 ${visit}입니다.`, item.purpose, item.prepare ? `준비: ${item.prepare}` : "", item.companion ? `같이 가는 사람: ${item.companion}` : ""].filter(Boolean).join("\n");
+  return [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//mom-care-ledger//KR",
+    "CALSCALE:GREGORIAN",
+    "BEGIN:VEVENT",
+    `UID:${icsEscape(item.id)}@mom-care-ledger`,
+    `DTSTAMP:${icsUtc(new Date())}`,
+    `DTSTART:${icsUtc(when)}`,
+    `DTEND:${icsUtc(end)}`,
+    `SUMMARY:${icsEscape(summary)}`,
+    `DESCRIPTION:${icsEscape(description)}`,
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:병원 이틀 전입니다",
+    "TRIGGER:PT0S",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR",
+    ""
+  ].join("\r\n");
+}
+
+function saveAppointmentReminder(id) {
+  const item = state.appointments.find((entry) => entry.id === id);
+  const when = item ? reminderAt(item) : null;
+  if (!item || !when || when.getTime() <= Date.now()) {
+    toast("알림 시각이 이미 지났습니다.");
+    return;
+  }
+  const file = new Blob([buildReminderIcs(item, when)], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "병원알림.ics";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  toast("캘린더에 넣으면 이틀 전 정오에 알림이 옵니다.");
+}
+
 function renderDayRow(row) {
   const time = clockOf(row.at);
   if (row.kind === "glucose") {
@@ -871,13 +944,15 @@ function renderDayRow(row) {
   }
   if (row.kind === "appointment") {
     const item = row.item;
+    const shownTime = row.hideTime ? "" : time;
     return `
-      <p class="when">${time ? esc(time) + " · " : ""}병원</p>
+      ${shownTime ? `<p class="when">${esc(shownTime)}</p>` : ""}
       ${item.status && item.status !== "예정" ? `<div class="badges"><span class="badge ${statusClass(item.status)}">${esc(item.status)}</span></div>` : ""}
       <h3>${esc(appointmentTitle(item))}</h3>
       ${item.purpose ? purposeList(item.purpose) : ""}
       ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
       ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
+      ${reminderNote(item)}
       ${item.visitNote ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}`;
   }
   const event = row.item;
@@ -896,18 +971,17 @@ function renderUpcomingHospitals() {
   ensureCalendar();
   const items = upcomingAppointments().filter((item) => String(item.at || "").slice(0, 10) > selectedDate);
   if (!items.length) return "";
-  const groups = [];
-  for (const item of items) {
-    const key = String(item.at || "").slice(0, 10);
-    const last = groups[groups.length - 1];
-    if (!last || last.key !== key) groups.push({ key, items: [item] });
-    else last.items.push(item);
-  }
-  return groups.map((group) => `
-    <section class="upcoming-day">
-      <p class="big-date">${esc(formatWhen(group.key))}</p>
-      <ul class="list">${group.items.map((item) => `<li class="item">${renderDayRow({ at: item.at, kind: "appointment", item })}</li>`).join("")}</ul>
-    </section>`).join("");
+  return `<ul class="list">${items.map((item) => {
+    const day = String(item.at || "").slice(0, 10);
+    const time = clockOf(item.at);
+    return `<li class="item">
+      <div class="date-time">
+        <p class="big-date">${esc(formatWhen(day))}</p>
+        ${time ? `<p class="big-date">${esc(time)}</p>` : ""}
+      </div>
+      ${renderDayRow({ at: item.at, kind: "appointment", item, hideTime: true })}
+    </li>`;
+  }).join("")}</ul>`;
 }
 
 function renderGlucose() {
@@ -1042,7 +1116,7 @@ function renderHome() {
           ${renderDaySchedule()}
         </article>
         ${showNext ? `<article class="card">
-          <p class="kicker">다음 병원</p>
+          <p class="kicker">다음 일정</p>
           ${upcoming || `<p class="empty">예정된 병원이 없습니다.</p>`}
           ${canWrite() ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-appointment">병원 일정 남기기</button></div>` : ""}
         </article>` : ""}
@@ -1265,6 +1339,7 @@ function renderAppointmentBody(item, withActions = false) {
     ${item.purpose ? purposeList(item.purpose) : ""}
     ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
     ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
+    ${reminderNote(item)}
     ${item.visitNote ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}
     ${withActions && canWrite() ? `<div class="actions no-print">
       <button type="button" class="btn-ghost" data-action="edit-appointment" data-id="${esc(item.id)}">고치기</button>
@@ -1517,7 +1592,7 @@ function summaryPlain() {
   const sugars = recentGlucose();
   if (!sugars.length) lines.push("- 이 기간에 적힌 혈당이 없습니다.");
   for (const item of sugars) lines.push(`- ${formatWhen(item.at)} ${item.timing} ${item.value} mg/dL${item.note ? " " + item.note : ""}`);
-  lines.push("", "다음 병원:");
+  lines.push("", "다음 일정:");
   if (!upcoming.length) lines.push("- 예정된 병원이 없습니다.");
   for (const item of upcoming) lines.push(`- ${formatWhen(item.at)} ${item.hospital} ${item.department} ${item.purpose}`.trim());
   return lines.join("\n");
@@ -1597,6 +1672,10 @@ function onClick(event) {
     formError = "";
     render();
     document.getElementById("family-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (action === "remind-appointment") {
+    saveAppointmentReminder(id);
     return;
   }
   if (action === "compose-appointment") {
