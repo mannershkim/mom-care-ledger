@@ -600,7 +600,7 @@ function render(options = {}) {
           <p class="eyebrow">가족 기록</p>
           <h1>${esc(name)}의 돌봄 장부</h1>
           <p class="sub">평소와 다른 일, 혈당, 병원 약속, 진료 때 전할 말을 한곳에 둡니다.</p>
-          <p class="meta">마지막 기록 ${esc(formatStamp(state.updatedAt))}${state.updatedBy ? " · " + esc(state.updatedBy) : ""}</p>
+          <p class="meta">마지막 기록 ${esc(formatStamp(state.updatedAt))}</p>
         </div>
       </header>
       ${renderBanners()}
