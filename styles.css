@@ -352,6 +352,12 @@ textarea { min-height: 120px; resize: vertical; }
   border-top: 1px solid var(--line);
 }
 
+.upcoming-day + .upcoming-day {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
 .allergy {
   background: #fdecea;
   border-radius: 14px;

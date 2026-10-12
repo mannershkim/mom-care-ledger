@@ -775,6 +775,7 @@ function renderDayRow(row) {
       <p class="when">${time ? esc(time) + " · " : ""}병원</p>
       <div class="badges"><span class="badge ${statusClass(item.status)}">${esc(item.status || "일정")}</span></div>
       <h3>${esc(item.hospital || "병원")}${item.department ? " · " + esc(item.department) : ""}</h3>
+      ${item.doctor ? `<p>선생님 ${esc(item.doctor)}</p>` : ""}
       ${item.purpose ? `<p>${textOf(item.purpose)}</p>` : ""}
       ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
       ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
@@ -792,8 +793,25 @@ function renderDayRow(row) {
     ${event.actionTaken ? `<p><strong>어떻게 했나</strong> ${textOf(event.actionTaken)}</p>` : ""}`;
 }
 
+function renderUpcomingHospitals() {
+  const items = upcomingAppointments();
+  if (!items.length) return `<p class="empty">예정된 병원이 없습니다.</p>`;
+  const groups = [];
+  for (const item of items) {
+    const key = String(item.at || "").slice(0, 10);
+    const last = groups[groups.length - 1];
+    if (!last || last.key !== key) groups.push({ key, items: [item] });
+    else last.items.push(item);
+  }
+  return groups.map((group) => `
+    <section class="upcoming-day">
+      <p class="big-date">${esc(formatWhen(group.key))}</p>
+      <p class="meta">${esc(relativeDay(group.key))}</p>
+      <ul class="list">${group.items.map((item) => `<li class="item">${renderDayRow({ at: item.at, kind: "appointment", item })}</li>`).join("")}</ul>
+    </section>`).join("");
+}
+
 function renderHome() {
-  const next = upcomingAppointments()[0];
   const notable = state.events.filter((event) => event.showDoctor).slice().sort(byNewest).slice(0, 3);
   const meds = state.profile.medications.filter((item) => item.name);
   return `
@@ -805,7 +823,7 @@ function renderHome() {
         </article>
         <article class="card">
           <p class="kicker">다음 병원</p>
-          ${next ? renderAppointmentBody(next) : `<p class="empty">예정된 병원이 없습니다.</p>`}
+          ${renderUpcomingHospitals()}
           ${canWrite() ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-appointment">병원 일정 남기기</button></div>` : ""}
         </article>
         <article class="card">
@@ -1130,7 +1148,7 @@ function contactRow(item) {
 function renderSummary() {
   const profile = state.profile;
   const events = doctorEvents();
-  const next = upcomingAppointments()[0];
+  const upcoming = upcomingAppointments();
   const meds = profile.medications.filter((item) => item.name);
   return `
     <article class="card summary-sheet">
@@ -1167,7 +1185,7 @@ function renderSummary() {
         ${event.recordedBy ? `<p class="meta">기록 ${esc(event.recordedBy)}</p>` : ""}
       `).join("") : `<p>이 기간에 진료 때 보여 줄 특이사항이 없습니다.</p>`}
       <h3>병원 일정</h3>
-      ${next ? `<p>${esc(formatWhen(next.at))} ${esc(next.hospital)} ${esc(next.department)} ${esc(next.purpose)}</p>` : `<p>예정된 병원이 없습니다.</p>`}
+      ${upcoming.length ? upcoming.map((item) => `<p>${esc(formatWhen(item.at))} ${esc(item.hospital)} ${esc(item.department)} ${esc(item.purpose)}</p>`).join("") : `<p>예정된 병원이 없습니다.</p>`}
       <h3>가족 연락처</h3>
       ${profile.contacts.length ? profile.contacts.map((item) => `<p>${esc(item.relation)} ${esc(item.name)} ${esc(item.phone)}</p>`).join("") : `<p>아직 적힌 연락처가 없습니다.</p>`}
     </article>`;
@@ -1190,7 +1208,7 @@ function options(list, current, labels = {}) {
 function summaryPlain() {
   const profile = state.profile;
   const events = doctorEvents();
-  const next = upcomingAppointments()[0];
+  const upcoming = upcomingAppointments();
   const lines = [
     `[어머니 돌봄 장부] 진료 참고`,
     `이름: ${[profile.name, profile.gender, ageFrom(profile.birthDate)].filter(Boolean).join(" · ") || "아직 적지 않음"}`,
@@ -1214,7 +1232,8 @@ function summaryPlain() {
     if (event.recordedBy) lines.push(`  기록: ${event.recordedBy}`);
   }
   lines.push("", "다음 병원:");
-  lines.push(next ? `- ${formatWhen(next.at)} ${next.hospital} ${next.department} ${next.purpose}`.trim() : "- 예정된 병원이 없습니다.");
+  if (!upcoming.length) lines.push("- 예정된 병원이 없습니다.");
+  for (const item of upcoming) lines.push(`- ${formatWhen(item.at)} ${item.hospital} ${item.department} ${item.purpose}`.trim());
   return lines.join("\n");
 }
 
