@@ -324,7 +324,8 @@ async function commitLedger() {
 
 function saveErrorMessage(error) {
   if (error && error.message === "password") return "가족 암호가 없어 저장하지 못했습니다.";
-  if (error && error.message === "token") return "가족 키가 맞지 않습니다. 키를 다시 넣어 주세요.";
+  if (error && error.message === "needkey") return "기록을 남기려면 가족 키가 필요합니다. 보기만 할 때는 가족 암호만 있으면 됩니다.";
+  if (error && error.message === "token") return "가족 키가 맞지 않습니다. github_pat_ 로 시작하는 키 전체를 다시 넣어 주세요.";
   if (error && error.message === "conflict") return "다른 사람이 방금 저장했습니다. 새로고침한 뒤 다시 남겨 주세요.";
   if (localMode) return "저장하지 못했습니다. 장부 창이 켜져 있는지 확인해 주세요.";
   return "GitHub 장부에 저장하지 못했습니다. 가족 키를 확인해 주세요.";
@@ -360,7 +361,7 @@ async function persist() {
     toast("장부 파일을 내려받았습니다. data 폴더의 ledger.json 과 바꾸면 됩니다.");
     return;
   }
-  throw new Error("token");
+  throw new Error("needkey");
 }
 
 function downloadLedger() {
@@ -559,7 +560,7 @@ function renderGate() {
         </div>
         ${setup && !canWrite() ? `<p class="hint">암호로 잠그려면 먼저 아래 가족 키를 넣습니다.</p>` : ""}
       </form>
-      ${!localMode ? renderFamilyKey() : ""}
+      ${setup && !localMode ? renderFamilyKey() : ""}
     </div>`;
 }
 
@@ -610,7 +611,7 @@ function restoreSearchFocus() {
 function renderFamilyKey() {
   if (githubToken()) return "";
   return `<form class="banner no-print" data-form="token" autocomplete="off">
-    <p>형제들도 여기서 기록을 남기려면 가족 키를 한 번 넣습니다. 키는 이 휴대폰에만 저장되고, 장부에는 적히지 않습니다.</p>
+    <p>기록을 남길 때만 가족 키가 필요합니다. 가족 암호와는 다른 글이고, github_pat_ 로 시작합니다. 보기만 할 때는 넣지 않아도 됩니다.</p>
     <label style="margin-top:10px">가족 키
       <input name="token" type="password" placeholder="github_pat_..." autocomplete="off">
     </label>
@@ -1424,10 +1425,18 @@ async function onSubmit(event) {
   formError = "";
   try {
     if (form.dataset.form === "token") {
-      const token = new FormData(form).get("token").toString().trim();
-      const ok = await checkToken(token);
-      if (!ok) {
-        toast("가족 키가 맞지 않습니다.");
+      const token = cleanToken(new FormData(form).get("token").toString());
+      const result = await checkToken(token);
+      if (result === "not-token") {
+        toast("가족 암호는 암호 칸에 넣습니다. 가족 키는 github_pat_ 로 시작하는 긴 글입니다.");
+        return;
+      }
+      if (result === "network") {
+        toast("키를 확인하지 못했습니다. 카카오톡 안이 아니라 사파리나 크롬에서 열어 주세요.");
+        return;
+      }
+      if (result !== "ok") {
+        toast("가족 키가 맞지 않습니다. 키 전체를 한 줄로 다시 넣어 주세요.");
         return;
       }
       localStorage.setItem("mom-ledger-github-token", token);
@@ -1585,17 +1594,30 @@ async function saveAndRender() {
   render();
 }
 
+function cleanToken(value) {
+  return String(value || "").replace(/[\s\u200b\u200c\u200d\ufeff'"]/g, "");
+}
+
+function looksLikeToken(token) {
+  return /^github_pat_[A-Za-z0-9_]+$/.test(token) || /^ghp_[A-Za-z0-9]+$/.test(token);
+}
+
 async function checkToken(token) {
-  if (!token) return false;
-  const res = await fetch(contentsUrl(), {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28"
-    },
-    cache: "no-store"
-  });
-  return res.ok;
+  if (!token) return "empty";
+  if (!looksLikeToken(token)) return "not-token";
+  try {
+    const res = await fetch(contentsUrl(), {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28"
+      },
+      cache: "no-store"
+    });
+    return res.ok ? "ok" : "bad";
+  } catch {
+    return "network";
+  }
 }
 
 async function restoreSample() {
