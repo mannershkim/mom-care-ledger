@@ -1016,6 +1016,9 @@ function recentGlucose() {
 }
 
 function renderHome() {
+  ensureCalendar();
+  const found = itemsOnDate(selectedDate);
+  const dayHasSchedule = found.appointments.length || found.events.length || found.family.length;
   const notable = state.events.filter((event) => event.showDoctor).slice().sort(byNewest).slice(0, 3);
   const meds = state.profile.medications.filter((item) => item.name);
   const upcoming = renderUpcomingHospitals();
@@ -1032,11 +1035,11 @@ function renderHome() {
           ${upcoming || `<p class="empty">예정된 병원이 없습니다.</p>`}
           ${canWrite() ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-appointment">병원 일정 남기기</button></div>` : ""}
         </article>` : ""}
-        <article class="card">
+        ${dayHasSchedule ? `<article class="card">
           <p class="kicker">진료 때 말할 최근 일</p>
           ${notable.length ? `<ul class="list">${notable.map((event) => `<li class="item">${renderEventItem(event)}</li>`).join("")}</ul>` : `<p class="empty">보여 주기로 한 특이사항이 없습니다.</p>`}
           ${canWrite() ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn pine" data-action="compose-event">특이사항 남기기</button></div>` : ""}
-        </article>
+        </article>` : ""}
       </div>
       <div class="stack">
         <article class="card">
