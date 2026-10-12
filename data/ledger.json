@@ -1,0 +1,113 @@
+{
+  "format": 1,
+  "demo": true,
+  "updatedAt": "2026-10-11T21:10:00+09:00",
+  "updatedBy": "큰딸",
+  "shareUrl": "",
+  "profile": {
+    "name": "홍길순",
+    "birthDate": "1942-03-15",
+    "gender": "여",
+    "bloodType": "A+",
+    "phone": "010-0000-0000",
+    "address": "부산 (예시, 동까지만)",
+    "allergies": "페니실린",
+    "conditions": "고혈압, 무릎 관절",
+    "medications": [
+      {
+        "id": "med-sample-1",
+        "name": "혈압약 (예시)",
+        "dose": "5mg 1정",
+        "when": "아침 식후",
+        "note": "어지러우면 가족에게 말하기"
+      },
+      {
+        "id": "med-sample-2",
+        "name": "영양제 (예시)",
+        "dose": "1포",
+        "when": "점심 식후",
+        "note": ""
+      }
+    ],
+    "contacts": [
+      {
+        "id": "contact-sample-1",
+        "name": "김하늘",
+        "relation": "큰딸",
+        "phone": "010-0000-0001"
+      },
+      {
+        "id": "contact-sample-2",
+        "name": "김바다",
+        "relation": "아들",
+        "phone": "010-0000-0002"
+      }
+    ],
+    "usualHospital": "예시 병원",
+    "usualDoctor": "내과",
+    "insurance": "건강보험 (예시)",
+    "tellDoctor": "10월 들어 아침 식사가 줄었다. 오른쪽 무릎은 걸으면 아프다.",
+    "note": "저녁에는 귀가 더 어두우시다. 천천히 말하면 잘 알아들으신다. 이 문장은 화면 예시다."
+  },
+  "events": [
+    {
+      "id": "evt-sample-1",
+      "at": "2026-10-11T07:40",
+      "category": "식사",
+      "severity": "살펴보기",
+      "title": "아침을 거의 드시지 않음",
+      "whatHappened": "평소 드시던 죽의 절반도 못 드시고 숟가락을 놓으셨다. 메슥거리지는 않으셨다.",
+      "actionTaken": "미지근한 물을 권하고, 점심은 죽을 다시 올렸다. 점심은 반 정도 드셨다.",
+      "recordedBy": "큰딸",
+      "showDoctor": true
+    },
+    {
+      "id": "evt-sample-2",
+      "at": "2026-10-10T21:20",
+      "category": "수면",
+      "severity": "기록",
+      "title": "밤잠은 평소와 같았다",
+      "whatHappened": "밤사이 깨지 않고 주무셨고, 아침 기분은 괜찮으셨다.",
+      "actionTaken": "특별한 조치는 없었다.",
+      "recordedBy": "아들",
+      "showDoctor": false
+    },
+    {
+      "id": "evt-sample-3",
+      "at": "2026-10-08T16:10",
+      "category": "통증",
+      "severity": "병원 상담",
+      "title": "오른쪽 무릎이 걸을 때 아픔",
+      "whatHappened": "동네를 한 바퀴 돈 뒤 오른쪽 무릎이 아프다고 하셨다. 부어 오르지는 않았다. 쉬면 덜하다고 하셨다.",
+      "actionTaken": "저녁 산책을 쉬고, 정형외과 예약을 잡았다.",
+      "recordedBy": "큰딸",
+      "showDoctor": true
+    }
+  ],
+  "appointments": [
+    {
+      "id": "apt-sample-1",
+      "at": "2026-10-20T10:30",
+      "hospital": "예시 병원",
+      "department": "정형외과",
+      "doctor": "",
+      "purpose": "오른쪽 무릎 통증",
+      "prepare": "복용약 목록, 최근 특이사항, 보험증",
+      "companion": "큰딸",
+      "status": "예정",
+      "visitNote": ""
+    },
+    {
+      "id": "apt-sample-2",
+      "at": "2026-09-28T09:00",
+      "hospital": "예시 병원",
+      "department": "내과",
+      "doctor": "",
+      "purpose": "혈압약 확인",
+      "prepare": "보험증",
+      "companion": "아들",
+      "status": "다녀옴",
+      "visitNote": "혈압은 안정적이어서 약은 그대로 드시기로 했다. 무릎은 정형외과에 가 보기로 했다."
+    }
+  ]
+}
