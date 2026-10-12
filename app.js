@@ -4,6 +4,7 @@ const STATUSES = ["예정", "다녀옴", "변경", "취소"];
 const BLOOD_TYPES = ["", "A+", "A-", "B+", "B-", "O+", "O-", "AB+", "AB-", "모름"];
 const GENDERS = ["", "여", "남"];
 const GLUCOSE_TIMINGS = ["공복", "아침 식전", "아침 식후", "점심 식전", "점심 식후", "저녁 식전", "저녁 식후", "취침", "기타"];
+const FAMILY_KINDS = ["생일", "경조사", "기념일", "기타"];
 
 const localMode = ["127.0.0.1", "localhost"].includes(location.hostname);
 const REPO = "mannershkim/mom-care-ledger";
@@ -68,6 +69,8 @@ let composingEvent = false;
 let composingAppointment = false;
 let composingGlucose = false;
 let editingGlucoseId = null;
+let composingFamily = false;
+let editingFamilyId = null;
 let eventCategory = "전체";
 let eventSeverity = "전체";
 let eventQuery = "";
@@ -144,7 +147,8 @@ function blank() {
     profile: { medications: [], contacts: [] },
     events: [],
     appointments: [],
-    glucose: []
+    glucose: [],
+    family: []
   });
 }
 
@@ -164,7 +168,8 @@ function normalize(data) {
     profile,
     events: Array.isArray(data.events) ? data.events : [],
     appointments: Array.isArray(data.appointments) ? data.appointments : [],
-    glucose: Array.isArray(data.glucose) ? data.glucose : []
+    glucose: Array.isArray(data.glucose) ? data.glucose : [],
+    family: Array.isArray(data.family) ? data.family : []
   };
 }
 
@@ -544,7 +549,8 @@ function authorOptions() {
 function isBlank(book) {
   const profile = book.profile;
   return !profile.name && !profile.birthDate && book.events.length === 0
-    && book.appointments.length === 0 && book.glucose.length === 0 && profile.medications.length === 0;
+    && book.appointments.length === 0 && book.glucose.length === 0
+    && book.family.length === 0 && profile.medications.length === 0;
 }
 
 function renderGate() {
@@ -605,6 +611,7 @@ function render(options = {}) {
         ${tabButton("appointments", "병원", "병원 일정")}
         ${tabButton("profile", "정보", "기본 정보")}
         ${tabButton("summary", "요약", "진료 요약")}
+        ${tabButton("family", "가족", "가족 일정")}
       </nav>
       ${renderPanel()}
       <footer class="footer no-print">
@@ -685,6 +692,7 @@ function renderPanel() {
   if (tab === "glucose") return `<section class="panel">${renderGlucose()}</section>`;
   if (tab === "appointments") return `<section class="panel">${renderAppointments()}</section>`;
   if (tab === "profile") return `<section class="panel">${renderProfile()}</section>`;
+  if (tab === "family") return `<section class="panel">${renderFamily()}</section>`;
   return `<section class="panel summary">${renderSummary()}</section>`;
 }
 
@@ -713,12 +721,42 @@ function shiftCalendar(delta) {
   calendarMonth = date.getMonth();
 }
 
+function familyOnDate(key) {
+  const monthDay = key.slice(5);
+  return state.family.filter((item) => {
+    const at = String(item.at || "");
+    if (item.yearly) return at.slice(5, 10) === monthDay;
+    return at.slice(0, 10) === key;
+  });
+}
+
+function nextFamilyDate(item, fromKey = todayKey()) {
+  const at = String(item.at || "").slice(0, 10);
+  if (!item.yearly) return at;
+  const monthDay = at.slice(5);
+  if (monthDay.length !== 5) return at;
+  const year = Number(fromKey.slice(0, 4));
+  const thisYear = `${year}-${monthDay}`;
+  return thisYear >= fromKey ? thisYear : `${year + 1}-${monthDay}`;
+}
+
+function familyAge(item, onKey) {
+  if (item.kind !== "생일") return null;
+  const [by, bm, bd] = String(item.at || "").slice(0, 10).split("-").map(Number);
+  const [year, month, day] = String(onKey || todayKey()).slice(0, 10).split("-").map(Number);
+  if (!by || !year || by >= year) return null;
+  let age = year - by;
+  if (month < bm || (month === bm && day < bd)) age -= 1;
+  return age > 0 ? age : null;
+}
+
 function itemsOnDate(key) {
   const match = (item) => String(item.at || "").slice(0, 10) === key;
   return {
     events: state.events.filter(match).slice().sort(bySoonest),
     appointments: state.appointments.filter(match).slice().sort(bySoonest),
-    glucose: state.glucose.filter(match).slice().sort(bySoonest)
+    glucose: state.glucose.filter(match).slice().sort(bySoonest),
+    family: familyOnDate(key)
   };
 }
 
@@ -749,11 +787,13 @@ function renderCalendar() {
     const marks = [];
     if (found.events.length) marks.push(`<span class="cal-mark event"></span>`);
     if (found.appointments.length) marks.push(`<span class="cal-mark hospital"></span>`);
+    if (found.family.length) marks.push(`<span class="cal-mark family"></span>`);
     const label = [
       `${month + 1}월 ${day}일`,
       key === today ? "오늘" : "",
       found.events.length ? `특이사항 ${found.events.length}건` : "",
-      found.appointments.length ? `병원 ${found.appointments.length}건` : ""
+      found.appointments.length ? `병원 ${found.appointments.length}건` : "",
+      found.family.length ? `가족 ${found.family.length}건` : ""
     ].filter(Boolean).join(", ");
     const sunday = new Date(year, month, day).getDay() === 0;
     cells.push(`<button type="button" class="cal-day${key === today ? " today" : ""}${sunday ? " sun" : ""}" data-action="cal-day" data-date="${key}" aria-pressed="${key === selectedDate}" aria-label="${esc(label)}"><span class="cal-num">${day}</span><span class="cal-marks">${marks.join("")}</span></button>`);
@@ -773,6 +813,7 @@ function renderCalendar() {
     <div class="cal-legend">
       <span><i class="cal-mark event"></i> 특이사항</span>
       <span><i class="cal-mark hospital"></i> 병원</span>
+      <span><i class="cal-mark family"></i> 가족</span>
     </div>`;
 }
 
@@ -781,10 +822,11 @@ function renderDaySchedule() {
   const found = itemsOnDate(selectedDate);
   const rows = [
     ...found.appointments.map((item) => ({ at: item.at, kind: "appointment", item })),
-    ...found.events.map((item) => ({ at: item.at, kind: "event", item }))
+    ...found.events.map((item) => ({ at: item.at, kind: "event", item })),
+    ...found.family.map((item) => ({ at: `${selectedDate}${String(item.at).includes("T") ? "T" + String(item.at).split("T")[1] : ""}`, kind: "family", item }))
   ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const heading = relativeDay(selectedDate) === "오늘" ? "오늘 일정" : "이 날의 일정";
-  const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow(row)}</li>`).join("")}</ul>` : `<p class="empty">이 날의 병원 일정과 특이사항이 없습니다.</p>`;
+  const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow(row)}</li>`).join("")}</ul>` : `<p class="empty">이 날의 일정이 없습니다.</p>`;
   return `
     <div id="day-detail" class="day-detail">
       <p class="kicker">${heading}</p>
@@ -805,6 +847,15 @@ function renderDayRow(row) {
       <p class="when">${time ? esc(time) + " · " : ""}혈당</p>
       <div class="badges"><span class="badge sugar">${esc(item.timing || "혈당")}</span></div>
       <h3 class="sugar-num">${esc(item.value)} <span>mg/dL</span></h3>
+      ${item.note ? `<p>${textOf(item.note)}</p>` : ""}`;
+  }
+  if (row.kind === "family") {
+    const item = row.item;
+    const age = familyAge(item, selectedDate);
+    return `
+      <p class="when">가족</p>
+      <div class="badges"><span class="badge family">${esc(item.kind || "가족")}</span></div>
+      <h3>${esc(item.title || "가족 일정")}${age ? ` · ${age}살` : ""}</h3>
       ${item.note ? `<p>${textOf(item.note)}</p>` : ""}`;
   }
   if (row.kind === "appointment") {
@@ -1207,6 +1258,68 @@ function renderAppointmentBody(item, withActions = false) {
     </div>` : ""}`;
 }
 
+function renderFamily() {
+  const editing = state.family.find((item) => item.id === editingFamilyId) || null;
+  const showForm = canWrite() && (composingFamily || editing);
+  const today = todayKey();
+  const upcoming = state.family.slice().sort((a, b) => nextFamilyDate(a, today).localeCompare(nextFamilyDate(b, today)));
+  return `
+    <div class="stack">
+      ${canWrite() && !showForm ? `<div class="actions no-print"><button type="button" class="btn" data-action="compose-family">가족 일정 남기기</button></div>` : ""}
+      ${showForm ? renderFamilyForm(editing) : ""}
+      <article class="card">
+        <h2>가족 일정</h2>
+        <p class="hint">생일은 태어난 날을 적고 매년을 켜 두면, 해마다 그 날에 점이 생깁니다.</p>
+        ${upcoming.length ? `<div class="list">${upcoming.map((item) => `<div class="item">${renderFamilyItem(item, true)}</div>`).join("")}</div>` : `<p class="empty">아직 적힌 가족 일정이 없습니다.</p>`}
+      </article>
+    </div>`;
+}
+
+function renderFamilyForm(item) {
+  const value = item || { id: "", kind: "생일", title: "", at: "", yearly: true, note: "" };
+  return `
+    <form class="card" id="family-form" data-form="family" autocomplete="off">
+      <h2>${item ? "가족 일정 고치기" : "가족 일정 남기기"}</h2>
+      <input type="hidden" name="id" value="${esc(value.id)}">
+      <div class="grid-2">
+        <label>종류<select name="kind">${options(FAMILY_KINDS, value.kind || "생일")}</select></label>
+        <label>누구, 무슨 일<input name="title" value="${esc(value.title)}" required placeholder="예: 큰딸, 조카 결혼식"></label>
+        <label>날짜<input type="date" name="at" value="${esc(String(value.at || "").slice(0, 10))}" required></label>
+        <label class="check" style="align-self:end">
+          <input type="checkbox" name="yearly" ${value.yearly ? "checked" : ""}>
+          매년 같은 날
+        </label>
+      </div>
+      <label style="margin-top:12px">메모
+        <textarea name="note" placeholder="장소, 시간, 전할 말">${esc(value.note || "")}</textarea>
+      </label>
+      ${formError ? `<p class="form-error">${esc(formError)}</p>` : ""}
+      <div class="actions" style="margin-top:12px">
+        <button class="btn" type="submit">${item ? "고친 내용 저장" : "일정 저장"}</button>
+        <button class="btn-ghost" type="button" data-action="cancel-form">취소</button>
+      </div>
+    </form>`;
+}
+
+function renderFamilyItem(item, withActions = false) {
+  const next = nextFamilyDate(item);
+  const age = familyAge(item, next);
+  const born = item.kind === "생일" && item.yearly ? String(item.at || "").slice(0, 10) : "";
+  return `
+    <p class="big-date">${esc(formatWhen(next))}</p>
+    <div class="badges">
+      <span class="badge family">${esc(item.kind || "가족")}</span>
+      ${item.yearly ? `<span class="badge">매년</span>` : ""}
+    </div>
+    <h3>${esc(item.title || "가족 일정")}${age ? ` · ${age}살` : ""}</h3>
+    ${born && born !== next ? `<p class="meta">${esc(formatWhen(born))}생</p>` : ""}
+    ${item.note ? `<p>${textOf(item.note)}</p>` : ""}
+    ${withActions && canWrite() ? `<div class="actions no-print">
+      <button type="button" class="btn-ghost" data-action="edit-family" data-id="${esc(item.id)}">고치기</button>
+      <button type="button" class="btn-ghost" data-action="delete-family" data-id="${esc(item.id)}">지우기</button>
+    </div>` : ""}`;
+}
+
 function renderProfile() {
   if (!canWrite()) return `<article class="card">${renderProfileRead()}</article>`;
   const profile = state.profile;
@@ -1454,6 +1567,24 @@ function onClick(event) {
     document.getElementById("glucose-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
+  if (action === "compose-family") {
+    tab = "family";
+    composingFamily = true;
+    editingFamilyId = null;
+    formError = "";
+    render();
+    document.getElementById("family-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (action === "edit-family") {
+    tab = "family";
+    editingFamilyId = id;
+    composingFamily = false;
+    formError = "";
+    render();
+    document.getElementById("family-form")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
   if (action === "compose-appointment") {
     tab = "appointments";
     composingAppointment = true;
@@ -1483,9 +1614,11 @@ function onClick(event) {
     composingEvent = false;
     composingAppointment = false;
     composingGlucose = false;
+    composingFamily = false;
     editingEventId = null;
     editingAppointmentId = null;
     editingGlucoseId = null;
+    editingFamilyId = null;
     formError = "";
     render();
     return;
@@ -1501,6 +1634,13 @@ function onClick(event) {
     const found = state.glucose.find((item) => item.id === id);
     if (!found || !confirm(`이 혈당 기록을 지울까요?\n${found.value} mg/dL`)) return;
     state.glucose = state.glucose.filter((item) => item.id !== id);
+    saveAndRender();
+    return;
+  }
+  if (action === "delete-family") {
+    const found = state.family.find((item) => item.id === id);
+    if (!found || !confirm(`이 가족 일정을 지울까요?\n${found.title || "가족 일정"}`)) return;
+    state.family = state.family.filter((item) => item.id !== id);
     saveAndRender();
     return;
   }
@@ -1671,6 +1811,7 @@ async function onSubmit(event) {
     if (form.dataset.form === "event") saveEvent(form);
     else if (form.dataset.form === "glucose") saveGlucose(form);
     else if (form.dataset.form === "appointment") saveAppointment(form);
+    else if (form.dataset.form === "family") saveFamily(form);
     else if (form.dataset.form === "profile") saveProfile();
     else if (form.dataset.form === "share") {
       state.shareUrl = new FormData(form).get("shareUrl").toString().trim();
@@ -1734,6 +1875,27 @@ function saveGlucose(form) {
   else state.glucose.push(record);
   composingGlucose = false;
   editingGlucoseId = null;
+}
+
+function saveFamily(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  if (!data.at || !data.title.trim()) {
+    formError = "누구인지와 날짜를 적어 주세요.";
+    return;
+  }
+  const record = {
+    id: data.id || uid(),
+    kind: FAMILY_KINDS.includes(data.kind) ? data.kind : "기타",
+    title: data.title.trim(),
+    at: data.at,
+    yearly: form.elements.yearly.checked,
+    note: data.note.trim()
+  };
+  const index = state.family.findIndex((item) => item.id === record.id);
+  if (index >= 0) state.family[index] = record;
+  else state.family.push(record);
+  composingFamily = false;
+  editingFamilyId = null;
 }
 
 function saveAppointment(form) {
