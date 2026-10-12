@@ -794,8 +794,7 @@ function renderDaySchedule() {
 }
 
 function appointmentTitle(item) {
-  const place = [item.hospital || "병원", item.department].filter(Boolean).join(" · ");
-  return [place, item.doctor].filter(Boolean).join(" ");
+  return [item.hospital || "병원", item.department, item.doctor].filter(Boolean).join(" · ");
 }
 
 function renderDayRow(row) {
@@ -812,7 +811,7 @@ function renderDayRow(row) {
     const item = row.item;
     return `
       <p class="when">${time ? esc(time) + " · " : ""}병원</p>
-      <div class="badges"><span class="badge ${statusClass(item.status)}">${esc(item.status || "일정")}</span></div>
+      ${item.status && item.status !== "예정" ? `<div class="badges"><span class="badge ${statusClass(item.status)}">${esc(item.status)}</span></div>` : ""}
       <h3>${esc(appointmentTitle(item))}</h3>
       ${item.purpose ? `<p>${textOf(item.purpose)}</p>` : ""}
       ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
@@ -1193,10 +1192,10 @@ function renderAppointmentBody(item, withActions = false) {
   const late = (item.status === "예정" || item.status === "변경") && dayDiff(item.at) < 0;
   return `
     <p class="big-date">${esc(formatWhen(item.at))}</p>
-    <div class="badges">
-      <span class="badge ${statusClass(item.status)}">${esc(item.status)}</span>
+    ${(item.status && item.status !== "예정") || late ? `<div class="badges">
+      ${item.status && item.status !== "예정" ? `<span class="badge ${statusClass(item.status)}">${esc(item.status)}</span>` : ""}
       ${late ? `<span class="badge late">예정일이 지났습니다</span>` : ""}
-    </div>
+    </div>` : ""}
     <h3>${esc(appointmentTitle(item))}</h3>
     ${item.purpose ? `<p>${textOf(item.purpose)}</p>` : ""}
     ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
