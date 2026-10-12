@@ -784,11 +784,10 @@ function renderDaySchedule() {
   const found = itemsOnDate(selectedDate);
   const rows = [
     ...found.appointments.map((item) => ({ at: item.at, kind: "appointment", item })),
-    ...found.events.map((item) => ({ at: item.at, kind: "event", item })),
-    ...found.glucose.map((item) => ({ at: item.at, kind: "glucose", item }))
+    ...found.events.map((item) => ({ at: item.at, kind: "event", item }))
   ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const heading = relativeDay(selectedDate) === "오늘" ? "오늘 일정" : "이 날의 일정";
-  const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow(row)}</li>`).join("")}</ul>` : `<p class="empty">이 날에는 적힌 일정과 기록이 없습니다.</p>`;
+  const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow(row)}</li>`).join("")}</ul>` : `<p class="empty">이 날의 병원 일정과 특이사항이 없습니다.</p>`;
   return `
     <div id="day-detail" class="day-detail">
       <p class="kicker">${heading}</p>
