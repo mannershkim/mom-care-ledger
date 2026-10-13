@@ -41,13 +41,7 @@ class Handler(SimpleHTTPRequestHandler):
         except (UnicodeDecodeError, json.JSONDecodeError):
             self.send_error(400)
             return
-        if not isinstance(data, dict):
-            self.send_error(400)
-            return
-        if not isinstance(data.get("profile"), dict):
-            self.send_error(400)
-            return
-        if not isinstance(data.get("events"), list) or not isinstance(data.get("appointments"), list):
+        if not _acceptable(data):
             self.send_error(400)
             return
         LEDGER.parent.mkdir(exist_ok=True)
@@ -64,6 +58,18 @@ class Handler(SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         print("[%s] %s" % (self.log_date_time_string(), fmt % args))
+
+
+def _acceptable(data):
+    if not isinstance(data, dict):
+        return False
+    if data.get("locked") is True and data.get("format") == 2:
+        return all(isinstance(data.get(key), str) and data.get(key) for key in ("salt", "iv", "data"))
+    return (
+        isinstance(data.get("profile"), dict)
+        and isinstance(data.get("events"), list)
+        and isinstance(data.get("appointments"), list)
+    )
 
 
 def main():

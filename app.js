@@ -1985,6 +1985,7 @@ function saveFamily(form) {
   const index = state.family.findIndex((item) => item.id === record.id);
   if (index >= 0) state.family[index] = record;
   else state.family.push(record);
+  if (form.elements.id) form.elements.id.value = record.id;
   composingFamily = false;
   editingFamilyId = null;
 }
