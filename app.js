@@ -1433,9 +1433,6 @@ function renderProfile() {
       <h3 style="margin-top:18px">복용약</h3>
       ${profile.medications.map(medRow).join("") || `<p class="empty">아직 적힌 약이 없습니다.</p>`}
       <button type="button" class="btn-ghost" data-action="add-med">약 추가</button>
-      <h3 style="margin-top:18px">가족 연락처</h3>
-      ${profile.contacts.map(contactRow).join("") || `<p class="empty">아직 적힌 연락처가 없습니다.</p>`}
-      <button type="button" class="btn-ghost" data-action="add-contact">연락처 추가</button>
       ${formError ? `<p class="form-error">${esc(formError)}</p>` : ""}
       <div class="actions" style="margin-top:14px">
         <button class="btn" type="submit">기본 정보 저장</button>
@@ -1463,9 +1460,7 @@ function renderProfileRead() {
     <h2>기본 정보</h2>
     <table>${rows.filter((row) => row[1]).map((row) => `<tr><th>${esc(row[0])}</th><td>${textOf(row[1])}</td></tr>`).join("")}</table>
     <h3>복용약</h3>
-    ${profile.medications.length ? profile.medications.map((item) => `<p><strong>${esc(item.name)}</strong> ${esc(item.dose)} ${esc(item.when)} ${esc(item.note)}</p>`).join("") : `<p class="empty">아직 적힌 약이 없습니다.</p>`}
-    <h3>가족 연락처</h3>
-    ${profile.contacts.length ? profile.contacts.map((item) => `<p>${esc(item.relation)} ${esc(item.name)} ${esc(item.phone)}</p>`).join("") : `<p class="empty">아직 적힌 연락처가 없습니다.</p>`}`;
+    ${profile.medications.length ? profile.medications.map((item) => `<p><strong>${esc(item.name)}</strong> ${esc(item.dose)} ${esc(item.when)} ${esc(item.note)}</p>`).join("") : `<p class="empty">아직 적힌 약이 없습니다.</p>`}`;
 }
 
 function field(label, name, value, placeholder = "", type = "text") {
@@ -1539,10 +1534,15 @@ function renderSummary() {
       <h3>혈당</h3>
       ${recentGlucose().length ? recentGlucose().map((item) => `<p>${esc(formatWhen(item.at))} ${esc(item.timing)} ${esc(item.value)} mg/dL${item.note ? " · " + esc(item.note) : ""}</p>`).join("") : `<p>이 기간에 적힌 혈당이 없습니다.</p>`}
       <h3>병원 일정</h3>
-      ${upcoming.length ? upcoming.map((item) => `<p>${esc(formatWhen(item.at))} ${esc(item.hospital)} ${esc(item.department)} ${esc(item.purpose)}</p>`).join("") : `<p>예정된 병원이 없습니다.</p>`}
-      <h3>가족 연락처</h3>
-      ${profile.contacts.length ? profile.contacts.map((item) => `<p>${esc(item.relation)} ${esc(item.name)} ${esc(item.phone)}</p>`).join("") : `<p>아직 적힌 연락처가 없습니다.</p>`}
+      ${upcoming.length ? `<ul class="reason-list">${upcoming.map(summaryVisit).join("")}</ul>` : `<p>예정된 병원이 없습니다.</p>`}
     </article>`;
+}
+
+function summaryVisit(item) {
+  return `<li class="summary-visit">
+    <p>${esc(formatWhen(item.at))} ${esc(appointmentTitle(item))}</p>
+    ${purposeList(item.purpose)}
+  </li>`;
 }
 
 function summaryRow(label, value) {
@@ -1591,7 +1591,14 @@ function summaryPlain() {
   for (const item of sugars) lines.push(`- ${formatWhen(item.at)} ${item.timing} ${item.value} mg/dL${item.note ? " " + item.note : ""}`);
   lines.push("", "다음 일정:");
   if (!upcoming.length) lines.push("- 예정된 병원이 없습니다.");
-  for (const item of upcoming) lines.push(`- ${formatWhen(item.at)} ${item.hospital} ${item.department} ${item.purpose}`.trim());
+  for (const item of upcoming) {
+    lines.push(`- ${formatWhen(item.at)} ${appointmentTitle(item)}`.trim());
+    const reasons = String(item.purpose || "")
+      .split(/\n/)
+      .map((line) => line.replace(/^\s*[-–—•]\s*/, "").trim())
+      .filter(Boolean);
+    for (const reason of reasons) lines.push(`  - ${reason}`);
+  }
   return lines.join("\n");
 }
 

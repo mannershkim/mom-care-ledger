@@ -556,6 +556,9 @@ code {
   padding-left: 16px;
 }
 
+.summary-visit { margin: 10px 0; }
+.summary-visit > p { margin: 0; }
+
 .reason-list li::before {
   content: "";
   position: absolute;
@@ -565,6 +568,12 @@ code {
   height: 6px;
   border-radius: 50%;
   background: var(--blue-deep);
+}
+
+.summary-visit .reason-list li::before {
+  background: transparent;
+  border: 1.5px solid var(--blue-deep);
+  box-sizing: border-box;
 }
 
 .sugar-table-wrap { overflow-x: auto; }
