@@ -952,7 +952,6 @@ function renderDayRow(row) {
       ${item.purpose ? purposeList(item.purpose) : ""}
       ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
       ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
-      ${reminderNote(item)}
       ${item.visitNote ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}`;
   }
   const event = row.item;
@@ -1339,7 +1338,6 @@ function renderAppointmentBody(item, withActions = false) {
     ${item.purpose ? purposeList(item.purpose) : ""}
     ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
     ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
-    ${reminderNote(item)}
     ${item.visitNote ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}
     ${withActions && canWrite() ? `<div class="actions no-print">
       <button type="button" class="btn-ghost" data-action="edit-appointment" data-id="${esc(item.id)}">고치기</button>
