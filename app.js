@@ -1117,7 +1117,6 @@ function renderHome() {
         ${showNext ? `<article class="card">
           <p class="kicker">다음 일정</p>
           ${upcoming || `<p class="empty">예정된 병원이 없습니다.</p>`}
-          ${canWrite() ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn" data-action="compose-appointment">병원 일정 남기기</button></div>` : ""}
         </article>` : ""}
         ${dayHasSchedule ? `<article class="card">
           <p class="kicker">진료 때 말할 최근 일</p>
