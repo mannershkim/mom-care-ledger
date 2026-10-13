@@ -512,6 +512,14 @@ code {
   background: #fff;
 }
 
+.summary-sheet > .actions { align-items: flex-end; }
+
+.summary-sheet > .actions select {
+  height: 48px;
+  padding: 8px 12px;
+  line-height: 1.2;
+}
+
 .summary-sheet h2 { font-size: 24px; }
 
 .summary-sheet table {
