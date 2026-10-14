@@ -58,7 +58,6 @@ let familyKey = null;
 let pendingPlain = null;
 let gateMode = null;
 let serverReady = false;
-let newerBackup = null;
 let tab = "home";
 let selectedDate = "";
 let calendarYear = null;
@@ -171,17 +170,6 @@ function normalize(data) {
     glucose: Array.isArray(data.glucose) ? data.glucose : [],
     family: Array.isArray(data.family) ? data.family : []
   };
-}
-
-function readBackup() {
-  try {
-    const backup = JSON.parse(localStorage.getItem("mom-ledger-backup") || "null");
-    if (backup && backup.updatedAt && (!state.updatedAt || backup.updatedAt > state.updatedAt)) {
-      newerBackup = normalize(backup);
-    }
-  } catch {
-    newerBackup = null;
-  }
 }
 
 function uid() {
@@ -324,10 +312,6 @@ async function sealState(freshSalt) {
   };
 }
 
-async function fetchLedger() {
-  return fetchRawLedger();
-}
-
 async function commitLedger() {
   const headers = githubHeaders(false);
   const metaRes = await fetch(contentsUrl(), { headers, cache: "no-store" });
@@ -372,7 +356,6 @@ async function persist() {
   try {
     localStorage.removeItem("mom-ledger-backup");
   } catch { /* 예전 기록이 없어도 됩니다. */ }
-  newerBackup = null;
   if (serverReady) {
     const res = await fetch("/api/ledger", {
       method: "POST",
@@ -684,14 +667,6 @@ function renderBanners() {
   if (canWrite() && isBlank(state)) {
     blocks.push(`<div class="banner no-print"><p>빈 장부입니다. 사용법이 보고 싶으면 예시를 다시 불러올 수 있습니다.</p>
       <div class="row"><button type="button" class="btn-ghost" data-action="restore-sample">예시 다시 불러오기</button></div>
-    </div>`);
-  }
-  if (localMode && newerBackup) {
-    blocks.push(`<div class="banner warn no-print"><p>이 브라우저에 파일보다 최근인 기록이 있습니다.</p>
-      <div class="row">
-        <button type="button" class="btn" data-action="restore-backup">그 기록 불러오기</button>
-        <button type="button" class="btn-ghost" data-action="drop-backup">그냥 두기</button>
-      </div>
     </div>`);
   }
   return blocks.join("");
@@ -1761,25 +1736,11 @@ function onClick(event) {
   if (action === "clear-demo") {
     if (!confirm("예시 기록을 지우고 빈 장부로 시작할까요?")) return;
     state = blank();
-    newerBackup = null;
     saveAndRender();
     return;
   }
   if (action === "restore-sample") {
     restoreSample();
-    return;
-  }
-  if (action === "restore-backup") {
-    if (!newerBackup) return;
-    state = newerBackup;
-    newerBackup = null;
-    saveAndRender();
-    return;
-  }
-  if (action === "drop-backup") {
-    newerBackup = null;
-    try { localStorage.removeItem("mom-ledger-backup"); } catch { /* 없어도 됩니다. */ }
-    render();
     return;
   }
   if (action === "forget-key") {
