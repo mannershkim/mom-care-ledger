@@ -242,6 +242,24 @@ textarea { min-height: 120px; resize: vertical; }
   font-weight: 800;
 }
 
+.kicker.next,
+.kicker.result {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.kicker.next {
+  color: #0f6578;
+  background: #e5f6f8;
+}
+
+.kicker.result {
+  color: #1d6b45;
+  background: #e5f4ea;
+}
+
 .big-date {
   margin: 0;
   font-size: 22px;

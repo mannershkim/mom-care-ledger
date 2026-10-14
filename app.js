@@ -1101,7 +1101,7 @@ function renderVisitResults(appointments) {
   if (!results.length) return "";
   return `
     <article class="card">
-      <p class="kicker">진료 결과</p>
+      <p class="kicker result">진료 결과</p>
       <ul class="list">${results.map((item) => `<li class="item">
         <p class="when">${esc(clockOf(item.at))}</p>
         <h3>${esc(appointmentTitle(item))}</h3>
@@ -1125,7 +1125,7 @@ function renderHome() {
           ${renderDaySchedule()}
         </article>
         ${showNext ? `<article class="card">
-          <p class="kicker">다음 일정</p>
+          <p class="kicker next">다음 일정</p>
           ${upcoming || `<p class="empty">예정된 병원이 없습니다.</p>`}
         </article>` : ""}
         ${renderVisitResults(found.appointments)}
