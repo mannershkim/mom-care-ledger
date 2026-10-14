@@ -70,6 +70,7 @@ let composingGlucose = false;
 let editingGlucoseId = null;
 let composingFamily = false;
 let editingFamilyId = null;
+let editingVisitId = null;
 let eventCategory = "전체";
 let eventSeverity = "전체";
 let eventQuery = "";
@@ -808,11 +809,10 @@ function renderDaySchedule() {
   const found = itemsOnDate(selectedDate);
   const rows = [
     ...found.appointments.map((item) => ({ at: item.at, kind: "appointment", item })),
-    ...found.events.map((item) => ({ at: item.at, kind: "event", item })),
     ...found.family.map((item) => ({ at: `${selectedDate}${String(item.at).includes("T") ? "T" + String(item.at).split("T")[1] : ""}`, kind: "family", item }))
   ].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const heading = relativeDay(selectedDate) === "오늘" ? "오늘 일정" : "일정";
-  const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow(row)}</li>`).join("")}</ul>` : `<p class="empty">일정이 없습니다.</p>`;
+  const body = rows.length ? `<ul class="list">${rows.map((row) => `<li class="item">${renderDayRow({ ...row, hideVisit: true })}${row.kind === "appointment" ? renderVisitAction(row.item) : ""}</li>`).join("")}</ul>` : `<p class="empty">일정이 없습니다.</p>`;
   return `
     <div id="day-detail" class="day-detail">
       <p class="kicker">${heading}</p>
@@ -927,7 +927,7 @@ function renderDayRow(row) {
       ${item.purpose ? purposeList(item.purpose) : ""}
       ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
       ${item.companion ? `<p><strong>같이 가는 사람</strong> ${esc(item.companion)}</p>` : ""}
-      ${item.visitNote ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}`;
+      ${item.visitNote && !row.hideVisit ? `<p class="muted-box"><strong>다녀온 뒤</strong><br>${textOf(item.visitNote)}</p>` : ""}`;
   }
   const event = row.item;
   return `
@@ -1074,11 +1074,46 @@ function recentGlucose() {
     .sort(byNewest);
 }
 
+function renderVisitAction(item) {
+  if (!canWrite() || String(item.visitNote || "").trim()) return "";
+  if (editingVisitId === item.id) return renderVisitForm(item);
+  return `<div class="actions no-print" style="margin-top:8px"><button type="button" class="btn-ghost" data-action="compose-visit" data-id="${esc(item.id)}">진료 결과</button></div>`;
+}
+
+function renderVisitForm(item) {
+  return `
+    <form id="visit-form" data-form="visit" style="margin-top:10px" autocomplete="off">
+      <p class="kicker">${esc(appointmentTitle(item))}</p>
+      <input type="hidden" name="id" value="${esc(item.id)}">
+      <label>이 진료에서 들은 내용
+        <textarea name="visitNote" required placeholder="바뀐 약, 다음 주의, 검사 이야기">${esc(item.visitNote || "")}</textarea>
+      </label>
+      ${formError ? `<p class="form-error">${esc(formError)}</p>` : ""}
+      <div class="actions" style="margin-top:12px">
+        <button class="btn" type="submit">결과 저장</button>
+        <button class="btn-ghost" type="button" data-action="cancel-form">취소</button>
+      </div>
+    </form>`;
+}
+
+function renderVisitResults(appointments) {
+  const results = appointments.filter((item) => String(item.visitNote || "").trim());
+  if (!results.length) return "";
+  return `
+    <article class="card">
+      <p class="kicker">진료 결과</p>
+      <ul class="list">${results.map((item) => `<li class="item">
+        <p class="when">${esc(clockOf(item.at))}</p>
+        <h3>${esc(appointmentTitle(item))}</h3>
+        ${editingVisitId === item.id ? renderVisitForm(item) : `<p>${textOf(item.visitNote)}</p>
+        ${canWrite() ? `<div class="actions no-print" style="margin-top:8px"><button type="button" class="btn-ghost" data-action="compose-visit" data-id="${esc(item.id)}">수정</button></div>` : ""}`}
+      </li>`).join("")}</ul>
+    </article>`;
+}
+
 function renderHome() {
   ensureCalendar();
   const found = itemsOnDate(selectedDate);
-  const dayHasSchedule = found.appointments.length || found.events.length || found.family.length;
-  const notable = state.events.filter((event) => event.showDoctor).slice().sort(byNewest).slice(0, 3);
   const meds = state.profile.medications.filter((item) => item.name);
   const upcoming = renderUpcomingHospitals();
   const showNext = Boolean(upcoming) || upcomingAppointments().length === 0;
@@ -1093,11 +1128,7 @@ function renderHome() {
           <p class="kicker">다음 일정</p>
           ${upcoming || `<p class="empty">예정된 병원이 없습니다.</p>`}
         </article>` : ""}
-        ${dayHasSchedule ? `<article class="card">
-          <p class="kicker">진료 때 말할 최근 일</p>
-          ${notable.length ? `<ul class="list">${notable.map((event) => `<li class="item">${renderEventItem(event)}</li>`).join("")}</ul>` : `<p class="empty">보여 주기로 한 특이사항이 없습니다.</p>`}
-          ${canWrite() ? `<div class="actions" style="margin-top:12px"><button type="button" class="btn pine" data-action="compose-event">특이사항 남기기</button></div>` : ""}
-        </article>` : ""}
+        ${renderVisitResults(found.appointments)}
       </div>
       <div class="stack">
         <article class="card">
@@ -1517,6 +1548,7 @@ function summaryVisit(item) {
   return `<li class="summary-visit">
     <p>${esc(formatWhen(item.at))} ${esc(appointmentTitle(item))}</p>
     ${purposeList(item.purpose)}
+    ${item.visitNote ? `<p>${textOf(item.visitNote)}</p>` : ""}
   </li>`;
 }
 
@@ -1573,6 +1605,7 @@ function summaryPlain() {
       .map((line) => line.replace(/^\s*[-–—•]\s*/, "").trim())
       .filter(Boolean);
     for (const reason of reasons) lines.push(`  - ${reason}`);
+    if (item.visitNote) lines.push(`  진료 결과: ${item.visitNote}`);
   }
   return lines.join("\n");
 }
@@ -1657,6 +1690,14 @@ function onClick(event) {
     saveAppointmentReminder(id);
     return;
   }
+  if (action === "compose-visit") {
+    tab = "home";
+    editingVisitId = id;
+    formError = "";
+    render({ keepScroll: true });
+    document.getElementById("visit-form")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
   if (action === "compose-appointment") {
     tab = "appointments";
     composingAppointment = true;
@@ -1691,6 +1732,7 @@ function onClick(event) {
     editingAppointmentId = null;
     editingGlucoseId = null;
     editingFamilyId = null;
+    editingVisitId = null;
     formError = "";
     render();
     return;
@@ -1869,6 +1911,7 @@ async function onSubmit(event) {
     if (form.dataset.form === "event") saveEvent(form);
     else if (form.dataset.form === "glucose") saveGlucose(form);
     else if (form.dataset.form === "appointment") saveAppointment(form);
+    else if (form.dataset.form === "visit") saveVisit(form);
     else if (form.dataset.form === "family") saveFamily(form);
     else if (form.dataset.form === "profile") saveProfile();
     else if (form.dataset.form === "share") {
@@ -1955,6 +1998,22 @@ function saveFamily(form) {
   if (form.elements.id) form.elements.id.value = record.id;
   composingFamily = false;
   editingFamilyId = null;
+}
+
+function saveVisit(form) {
+  const data = Object.fromEntries(new FormData(form).entries());
+  const note = data.visitNote.trim();
+  if (!note) {
+    formError = "진료에서 들은 내용을 적어 주세요.";
+    return;
+  }
+  const index = state.appointments.findIndex((item) => item.id === data.id);
+  if (index < 0) {
+    formError = "이 일정을 찾지 못했습니다.";
+    return;
+  }
+  state.appointments[index] = { ...state.appointments[index], visitNote: note };
+  editingVisitId = null;
 }
 
 function saveAppointment(form) {
