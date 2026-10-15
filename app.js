@@ -473,6 +473,13 @@ function titleOf(event) {
   return event.title || brief(event.whatHappened, 36) || "기록";
 }
 
+function familyKindClass(kind) {
+  if (kind === "생일") return "birthday";
+  if (kind === "경조사") return "ceremony";
+  if (kind === "기념일") return "anniversary";
+  return "other";
+}
+
 function badgeClass(severity) {
   if (severity === "병원 상담") return "doctor";
   if (severity === "살펴보기") return "watch";
@@ -825,6 +832,77 @@ function appointmentTitle(item) {
   return [item.hospital || "병원", item.department, item.doctor].filter(Boolean).join(" · ");
 }
 
+function smsPhone(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 9 ? digits : "";
+}
+
+function shareContactPhones() {
+  return (state.profile.contacts || []).map((item) => smsPhone(item.phone)).filter(Boolean);
+}
+
+function shareSmsHref(body, phones) {
+  if (!phones.length) return "";
+  const encoded = encodeURIComponent(body);
+  const list = phones.join(",");
+  const apple = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return apple ? `sms:${list}&body=${encoded}` : `sms:${list}?body=${encoded}`;
+}
+
+function buildAppointmentShareText(item) {
+  const who = state.profile.name || "어머니";
+  const lines = [`[돌봄 장부] ${who} 다음 일정`, formatWhen(item.at)];
+  const title = appointmentTitle(item);
+  if (title) lines.push(title);
+  for (const line of String(item.purpose || "").split(/\n/)) {
+    const bit = line.replace(/^\s*[-–—•]\s*/, "").trim();
+    if (bit) lines.push(`· ${bit}`);
+  }
+  if (item.prepare) lines.push(`준비: ${item.prepare}`);
+  if (item.companion) lines.push(`같이 가는 사람: ${item.companion}`);
+  return lines.join("\n");
+}
+
+function buildFamilyShareText(item, onDay) {
+  const who = state.profile.name || "어머니";
+  const day = onDay || nextFamilyDate(item);
+  const lines = [
+    `[돌봄 장부] ${who} 다음 일정`,
+    formatWhen(day),
+    `${item.kind || "가족"} · ${item.title || "가족 일정"}`
+  ];
+  if (item.note) lines.push(item.note);
+  return lines.join("\n");
+}
+
+function renderUpcomingShare(row) {
+  return `<div class="actions no-print" style="margin-top:8px"><button type="button" class="btn-ghost" data-action="share-upcoming" data-kind="${esc(row.kind)}" data-id="${esc(row.item.id)}" data-day="${esc(row.day || "")}">공유</button></div>`;
+}
+
+function openUpcomingShare(kind, id, day) {
+  const phones = shareContactPhones();
+  if (!phones.length) {
+    toast("기본 정보에 형제 전화번호를 적어 주세요.");
+    tab = "profile";
+    formError = "";
+    render();
+    return;
+  }
+  let body = "";
+  if (kind === "appointment") {
+    const item = state.appointments.find((entry) => entry.id === id);
+    if (!item) return;
+    body = buildAppointmentShareText(item);
+  } else {
+    const item = state.family.find((entry) => entry.id === id);
+    if (!item) return;
+    body = buildFamilyShareText(item, day || undefined);
+  }
+  const href = shareSmsHref(body, phones);
+  if (!href) return;
+  window.location.href = href;
+}
+
 function reminderAt(item) {
   const [year, month, day] = String(item.at || "").slice(0, 10).split("-").map(Number);
   if (!year || !month || !day) return null;
@@ -910,10 +988,10 @@ function renderDayRow(row) {
   }
   if (row.kind === "family") {
     const item = row.item;
-    const age = familyAge(item, selectedDate);
+    const age = familyAge(item, row.on || selectedDate);
     return `
       <p class="when">가족</p>
-      <div class="badges"><span class="badge family">${esc(item.kind || "가족")}</span></div>
+      <div class="badges"><span class="badge ${familyKindClass(item.kind)}">${esc(item.kind || "기타")}</span></div>
       <h3>${esc(item.title || "가족 일정")}${age ? ` · ${age}살` : ""}</h3>
       ${item.note ? `<p>${textOf(item.note)}</p>` : ""}`;
   }
@@ -922,7 +1000,7 @@ function renderDayRow(row) {
     const shownTime = row.hideTime ? "" : time;
     return `
       ${shownTime ? `<p class="when">${esc(shownTime)}</p>` : ""}
-      ${item.status && item.status !== "예정" ? `<div class="badges"><span class="badge ${statusClass(item.status)}">${esc(item.status)}</span></div>` : ""}
+      <div class="badges"><span class="badge visit">진료</span>${item.status && item.status !== "예정" ? `<span class="badge ${statusClass(item.status)}">${esc(item.status)}</span>` : ""}</div>
       <h3>${esc(appointmentTitle(item))}</h3>
       ${item.purpose ? purposeList(item.purpose) : ""}
       ${item.prepare ? `<p><strong>준비</strong> ${esc(item.prepare)}</p>` : ""}
@@ -941,21 +1019,38 @@ function renderDayRow(row) {
     ${event.actionTaken ? `<p><strong>어떻게 했나</strong> ${textOf(event.actionTaken)}</p>` : ""}`;
 }
 
-function renderUpcomingHospitals() {
+function upcomingEntries() {
   ensureCalendar();
-  const items = upcomingAppointments().filter((item) => String(item.at || "").slice(0, 10) > selectedDate);
+  const after = selectedDate;
+  const hospitals = upcomingAppointments()
+    .filter((item) => String(item.at || "").slice(0, 10) > after)
+    .map((item) => ({
+      sort: String(item.at || ""),
+      day: String(item.at || "").slice(0, 10),
+      time: clockOf(item.at),
+      kind: "appointment",
+      item
+    }));
+  const family = state.family.map((item) => {
+    const day = nextFamilyDate(item, after);
+    return { sort: day, day, time: "", kind: "family", item };
+  }).filter((row) => row.day > after);
+  return [...hospitals, ...family].sort((a, b) => (a.sort < b.sort ? -1 : a.sort > b.sort ? 1 : 0));
+}
+
+function renderUpcomingHospitals() {
+  const items = upcomingEntries();
   if (!items.length) return "";
-  return `<ul class="list">${items.map((item) => {
-    const day = String(item.at || "").slice(0, 10);
-    const time = clockOf(item.at);
-    return `<li class="item">
+  return `<ul class="list">${items.map((row) => `<li class="item">
       <div class="date-time">
-        <p class="big-date">${esc(formatWhen(day))}</p>
-        ${time ? `<p class="big-date">${esc(time)}</p>` : ""}
+        <p class="big-date">${esc(formatWhen(row.day))}</p>
+        ${row.time ? `<p class="big-date">${esc(row.time)}</p>` : ""}
       </div>
-      ${renderDayRow({ at: item.at, kind: "appointment", item, hideTime: true })}
-    </li>`;
-  }).join("")}</ul>`;
+      ${renderDayRow(row.kind === "family"
+        ? { at: row.day, kind: "family", item: row.item, on: row.day }
+        : { at: row.item.at, kind: "appointment", item: row.item, hideTime: true })}
+      ${renderUpcomingShare(row)}
+    </li>`).join("")}</ul>`;
 }
 
 function renderGlucose() {
@@ -1116,7 +1211,8 @@ function renderHome() {
   const found = itemsOnDate(selectedDate);
   const meds = state.profile.medications.filter((item) => item.name);
   const upcoming = renderUpcomingHospitals();
-  const showNext = Boolean(upcoming) || upcomingAppointments().length === 0;
+  const nothingScheduled = upcomingAppointments().length === 0 && state.family.length === 0;
+  const showNext = Boolean(upcoming) || nothingScheduled;
   return `
     <div class="home-grid">
       <div class="stack">
@@ -1126,7 +1222,7 @@ function renderHome() {
         </article>
         ${showNext ? `<article class="card">
           <p class="kicker next">다음 일정</p>
-          ${upcoming || `<p class="empty">예정된 병원이 없습니다.</p>`}
+          ${upcoming || `<p class="empty">예정된 일정이 없습니다.</p>`}
         </article>` : ""}
         ${renderVisitResults(found.appointments)}
       </div>
@@ -1400,7 +1496,7 @@ function renderFamilyItem(item, withActions = false) {
   return `
     <p class="big-date">${esc(formatWhen(next))}</p>
     <div class="badges">
-      <span class="badge family">${esc(item.kind || "가족")}</span>
+      <span class="badge ${familyKindClass(item.kind)}">${esc(item.kind || "기타")}</span>
       ${item.yearly ? `<span class="badge">매년</span>` : ""}
     </div>
     <h3>${esc(item.title || "가족 일정")}${age ? ` · ${age}살` : ""}</h3>
@@ -1439,6 +1535,10 @@ function renderProfile() {
       <h3 style="margin-top:18px">복용약</h3>
       ${profile.medications.map(medRow).join("") || `<p class="empty">아직 적힌 약이 없습니다.</p>`}
       <button type="button" class="btn-ghost" data-action="add-med">약 추가</button>
+      <h3 style="margin-top:18px">형제 연락처</h3>
+      <p class="hint">다음 일정 공유할 때 문자 받는 사람입니다. 휴대폰 주소록 번호를 그대로 적어도 됩니다.</p>
+      ${profile.contacts.map(contactRow).join("") || `<p class="empty">아직 적힌 연락처가 없습니다.</p>`}
+      <button type="button" class="btn-ghost" data-action="add-contact">연락처 추가</button>
       ${formError ? `<p class="form-error">${esc(formError)}</p>` : ""}
       <div class="actions" style="margin-top:14px">
         <button class="btn" type="submit">기본 정보 저장</button>
@@ -1466,7 +1566,9 @@ function renderProfileRead() {
     <h2>기본 정보</h2>
     <table>${rows.filter((row) => row[1]).map((row) => `<tr><th>${esc(row[0])}</th><td>${textOf(row[1])}</td></tr>`).join("")}</table>
     <h3>복용약</h3>
-    ${profile.medications.length ? profile.medications.map((item) => `<p><strong>${esc(item.name)}</strong> ${esc(item.dose)} ${esc(item.when)} ${esc(item.note)}</p>`).join("") : `<p class="empty">아직 적힌 약이 없습니다.</p>`}`;
+    ${profile.medications.length ? profile.medications.map((item) => `<p><strong>${esc(item.name)}</strong> ${esc(item.dose)} ${esc(item.when)} ${esc(item.note)}</p>`).join("") : `<p class="empty">아직 적힌 약이 없습니다.</p>`}
+    <h3>형제 연락처</h3>
+    ${profile.contacts.length ? profile.contacts.map((item) => `<p>${esc([item.relation, item.name].filter(Boolean).join(" · ") || "연락처")} ${esc(item.phone)}</p>`).join("") : `<p class="empty">아직 적힌 연락처가 없습니다.</p>`}`;
 }
 
 function field(label, name, value, placeholder = "", type = "text") {
@@ -1688,6 +1790,10 @@ function onClick(event) {
   }
   if (action === "remind-appointment") {
     saveAppointmentReminder(id);
+    return;
+  }
+  if (action === "share-upcoming") {
+    openUpcomingShare(button.dataset.kind, id, button.dataset.day || "");
     return;
   }
   if (action === "compose-visit") {

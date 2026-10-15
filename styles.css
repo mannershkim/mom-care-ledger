@@ -429,6 +429,11 @@ textarea { min-height: 120px; resize: vertical; }
 .badge.done { background: #e5f4ea; color: #1d6b45; border-color: transparent; }
 .badge.sugar { background: #e5f4ea; color: #1d6b45; border-color: transparent; }
 .badge.family { background: #fff4e5; color: #8a5a12; border-color: transparent; }
+.badge.visit { background: #e5f6f8; color: #0f6578; border-color: transparent; }
+.badge.birthday { background: #fde8f1; color: #9d3d66; border-color: transparent; }
+.badge.ceremony { background: #f3e8ff; color: #6b3fa0; border-color: transparent; }
+.badge.anniversary { background: #e7f6ee; color: #1d6b45; border-color: transparent; }
+.badge.other { background: #eef1f4; color: #3d4a5c; border-color: transparent; }
 .badge.late { background: #fdecea; color: var(--danger); border-color: transparent; }
 
 .timeline { display: grid; gap: 0; }
